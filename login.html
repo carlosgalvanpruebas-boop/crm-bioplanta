@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Agrotienda Bioplanta · Iniciar sesión</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+:root{--v1:#33513a;--v2:#4f7c5a;--v3:#84a38c;--v4:#a9c2af;--vbg:#eaefeb;--vlt:#f4f8f5;--texto:#1a2e1a}
+body{font-family:'Segoe UI',system-ui,sans-serif;background:linear-gradient(160deg,var(--v1),var(--v2) 60%);min-height:100vh;display:flex;align-items:center;justify-content:center;padding:20px}
+.box{background:#fff;border-radius:18px;padding:36px 32px;width:100%;max-width:360px;box-shadow:0 10px 30px rgba(0,0,0,.25)}
+.logo-ico{font-size:34px;text-align:center}
+.brand{font-size:16px;font-weight:800;color:var(--v1);text-align:center;margin-top:4px}
+.sub{font-size:12px;color:#666;text-align:center;margin-top:2px;margin-bottom:22px}
+.field{display:flex;flex-direction:column;gap:5px;margin-bottom:14px}
+.field label{font-size:12px;font-weight:600;color:var(--v2)}
+.field input{border:1.5px solid #b7e4c7;border-radius:8px;padding:11px 12px;font-size:14px;font-family:inherit;outline:none}
+.field input:focus{border-color:var(--v3);box-shadow:0 0 0 3px rgba(64,145,108,.12)}
+.btn{width:100%;margin-top:10px;padding:13px;background:linear-gradient(135deg,var(--v1),var(--v2));color:#fff;border:none;border-radius:10px;font-size:14px;font-weight:700;cursor:pointer;font-family:inherit}
+.btn:disabled{opacity:.6}
+.msg{margin-top:14px;padding:9px 12px;border-radius:8px;font-size:13px;text-align:center;display:none}
+.msg.err{background:#fde8e8;color:#a00;display:block}
+.back{display:block;text-align:center;margin-top:18px;font-size:12px;color:var(--v2);text-decoration:none}
+</style>
+</head>
+<body>
+
+<div class="box">
+  <div class="logo-ico">🌱</div>
+  <div class="brand">Equipo Agrotienda</div>
+  <div class="sub">Ingresa con tu correo y contraseña</div>
+
+  <form id="form-login">
+    <div class="field">
+      <label>Correo</label>
+      <input type="email" id="email" required autocomplete="username">
+    </div>
+    <div class="field">
+      <label>Contraseña</label>
+      <input type="password" id="password" required autocomplete="current-password">
+    </div>
+    <button class="btn" type="submit" id="btn-entrar">Entrar</button>
+  </form>
+  <div class="msg err" id="msg"></div>
+
+  <a class="back" href="index.html">&larr; Volver</a>
+</div>
+
+<script>
+const SUPABASE_URL = 'https://fpqogvxssnoarzgxcitc.supabase.co';
+const SUPABASE_KEY = 'sb_publishable_ccZF-8tenblFEah5lXfd3w_mYTHMtMC';
+const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+const form = document.getElementById('form-login');
+const btn = document.getElementById('btn-entrar');
+const msg = document.getElementById('msg');
+
+form.addEventListener('submit', async (e) => {
+  e.preventDefault();
+  msg.style.display = 'none';
+  btn.disabled = true;
+  btn.textContent = 'Entrando...';
+
+  const email = document.getElementById('email').value.trim();
+  const password = document.getElementById('password').value;
+
+  const { data, error } = await sb.auth.signInWithPassword({ email, password });
+
+  if (error) {
+    msg.textContent = 'Correo o contraseña incorrectos.';
+    msg.style.display = 'block';
+    btn.disabled = false;
+    btn.textContent = 'Entrar';
+    return;
+  }
+
+  window.location.href = 'hub.html';
+});
+
+// Si ya hay sesión activa, saltar directo al Hub.
+(async () => {
+  const { data: { session } } = await sb.auth.getSession();
+  if (session) window.location.href = 'hub.html';
+})();
+</script>
+
+</body>
+</html>

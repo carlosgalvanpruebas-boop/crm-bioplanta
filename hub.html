@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Agrotienda Bioplanta · Hub</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+:root{--v1:#33513a;--v2:#4f7c5a;--v3:#84a38c;--v4:#a9c2af;--vbg:#eaefeb;--vlt:#f4f8f5;--texto:#1a2e1a;--beige:#e6ceab;--vino:#984745}
+body{font-family:'Segoe UI',system-ui,sans-serif;background:#f0f4f0;color:var(--texto);min-height:100vh}
+.header{background:linear-gradient(135deg,var(--v1),var(--v2));color:#fff;padding:16px 20px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;box-shadow:0 2px 12px rgba(0,0,0,.2)}
+.hdr-l{display:flex;align-items:center;gap:10px}
+.logo-ico{font-size:26px}
+.brand{font-size:15px;font-weight:800}
+.brand-sub{font-size:11px;opacity:.8}
+.hdr-r{display:flex;align-items:center;gap:14px}
+.who{font-size:12px;text-align:right;line-height:1.3}
+.who b{font-size:13px}
+.btn-out{background:rgba(255,255,255,.15);border:1px solid rgba(255,255,255,.3);color:#fff;padding:7px 16px;border-radius:20px;font-size:12px;cursor:pointer;font-family:inherit}
+
+.wrap{max-width:1100px;margin:0 auto;padding:28px 18px 60px}
+.sec-t{font-size:13px;font-weight:800;text-transform:uppercase;letter-spacing:1px;color:var(--v2);margin:26px 0 12px}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:16px}
+.grp{background:#fff;border-radius:16px;padding:20px;box-shadow:0 2px 10px rgba(0,0,0,.07);border-top:5px solid var(--v3)}
+.grp.locked{opacity:.55}
+.grp.publico{border-top-color:var(--beige)}
+.grp-top{display:flex;justify-content:space-between;align-items:flex-start}
+.grp-ico{font-size:26px}
+.grp-tag{font-size:10px;font-weight:800;padding:3px 9px;border-radius:10px}
+.tag-completo{background:var(--v4);color:var(--v1)}
+.tag-parcial{background:var(--beige);color:var(--v1)}
+.tag-inactivo{background:#eee;color:#888}
+.tag-publico{background:var(--beige);color:var(--v1)}
+.grp-nom{font-size:15px;font-weight:800;margin-top:10px;color:var(--v1)}
+.sub-list{margin-top:12px;display:flex;flex-direction:column;gap:6px}
+.sub-item{display:flex;justify-content:space-between;align-items:center;font-size:12.5px;padding:7px 10px;border-radius:8px;background:var(--vlt);color:var(--v2);text-decoration:none}
+.sub-item.pronto{background:#f4f4f4;color:#999;cursor:default}
+.sub-badge{font-size:9px;background:#eee;color:#999;padding:2px 7px;border-radius:8px}
+
+.loading{text-align:center;padding:80px;color:#888}
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div class="hdr-l">
+    <div class="logo-ico">🌱</div>
+    <div>
+      <div class="brand">Agrotienda Bioplanta</div>
+      <div class="brand-sub">Contigo, desde la semilla hasta la cosecha</div>
+    </div>
+  </div>
+  <div class="hdr-r">
+    <div class="who" id="who">Cargando...</div>
+    <button class="btn-out" onclick="salir()">Salir</button>
+  </div>
+</div>
+
+<div class="wrap" id="wrap">
+  <div class="loading">Cargando tu Hub...</div>
+</div>
+
+<script>
+const SUPABASE_URL = 'https://fpqogvxssnoarzgxcitc.supabase.co';
+const SUPABASE_KEY = 'sb_publishable_ccZF-8tenblFEah5lXfd3w_mYTHMtMC';
+const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+const SUBMODULOS = {
+  1: { nombre: 'Mostrador', icono: '🛒', items: [
+        { id:'1.1', nombre:'Registro de clientes', href:'registro-clientes.html', listo:true },
+        { id:'1.2', nombre:'Sugerido de compra' },
+        { id:'1.3', nombre:'Resumen venta' },
+        { id:'1.4', nombre:'Tablero de tareas' },
+        { id:'1.5', nombre:'Seguimiento de inventario' },
+        { id:'1.6', nombre:'Cuadre de caja' },
+        { id:'1.7', nombre:'Solicitudes de pedido' },
+      ]},
+  2: { nombre: 'Administrativo', icono: '📊', items: [
+        { id:'2.1', nombre:'Análisis de inventario' },
+        { id:'2.2', nombre:'Sugerido de compras' },
+        { id:'2.3', nombre:'Registro de ventas' },
+        { id:'2.4', nombre:'Cartera clientes' },
+        { id:'2.6', nombre:'Base de datos clientes' },
+        { id:'2.7', nombre:'Productores de palma' },
+        { id:'2.8', nombre:'Resumen inventario' },
+      ]},
+  3: { nombre: 'Gerencia', icono: '📈', items: [
+        { id:'3.1', nombre:'Ventas por almacén' },
+        { id:'3.2', nombre:'Cartera' },
+        { id:'3.3', nombre:'Cuentas por pagar/cobrar' },
+        { id:'3.4', nombre:'Resumen almacén' },
+      ]},
+};
+
+function tagClase(nivel) {
+  if (nivel === 'completo') return 'tag-completo';
+  if (nivel === 'parcial') return 'tag-parcial';
+  return 'tag-inactivo';
+}
+function tagTexto(nivel) {
+  if (nivel === 'completo') return 'Completo';
+  if (nivel === 'parcial') return 'Parcial';
+  return 'Sin acceso';
+}
+
+function renderGrupo(numero, nivel, esSuperAdmin) {
+  const g = SUBMODULOS[numero];
+  const activo = esSuperAdmin || nivel === 'completo' || nivel === 'parcial';
+  const nivelMostrado = esSuperAdmin ? 'completo' : nivel;
+  const itemsHtml = g.items.map(it => {
+    if (it.listo && activo) {
+      return `<a class="sub-item" href="${it.href}"><span>${it.id} ${it.nombre}</span></a>`;
+    }
+    return `<div class="sub-item pronto"><span>${it.id} ${it.nombre}</span><span class="sub-badge">Próximamente</span></div>`;
+  }).join('');
+
+  return `
+    <div class="grp ${activo ? '' : 'locked'}">
+      <div class="grp-top">
+        <div class="grp-ico">${g.icono}</div>
+        <div class="grp-tag ${tagClase(nivelMostrado)}">${activo ? tagTexto(nivelMostrado) : '🔒 Sin acceso'}</div>
+      </div>
+      <div class="grp-nom">${numero}. ${g.nombre}</div>
+      <div class="sub-list">${itemsHtml}</div>
+    </div>
+  `;
+}
+
+function renderPublico(icono, nombre, href, desc) {
+  return `
+    <a class="grp publico" style="text-decoration:none;color:inherit;display:block" href="${href}">
+      <div class="grp-top">
+        <div class="grp-ico">${icono}</div>
+        <div class="grp-tag tag-publico">🌐 Público</div>
+      </div>
+      <div class="grp-nom">${nombre}</div>
+      <div class="sub-list"><div class="sub-item"><span>${desc}</span></div></div>
+    </a>
+  `;
+}
+
+async function salir() {
+  await sb.auth.signOut();
+  window.location.href = 'index.html';
+}
+
+(async () => {
+  const { data: { session } } = await sb.auth.getSession();
+  if (!session) { window.location.href = 'login.html'; return; }
+
+  const userId = session.user.id;
+  const { data: perfil } = await sb.from('perfiles').select('*').eq('id', userId).single();
+  const { data: permisos } = await sb.from('permisos_modulo').select('*').eq('perfil_id', userId);
+
+  if (!perfil) {
+    document.getElementById('wrap').innerHTML = '<div class="loading">Tu usuario no tiene un perfil configurado todavía. Pídele a Carlos que te lo cree en el Panel de Accesos.</div>';
+    return;
+  }
+
+  document.getElementById('who').innerHTML = `<b>${perfil.nombre}</b><br>${perfil.cargo} · ${perfil.sede}`;
+
+  const nivel1 = (permisos || []).find(p => p.modulo === 1)?.nivel || 'inactivo';
+  const nivel2 = (permisos || []).find(p => p.modulo === 2)?.nivel || 'inactivo';
+  const nivel3 = (permisos || []).find(p => p.modulo === 3)?.nivel || 'inactivo';
+
+  let html = '<div class="sec-t">Tus módulos</div><div class="grid">';
+  html += renderGrupo(1, nivel1, perfil.es_super_admin);
+  html += renderGrupo(2, nivel2, perfil.es_super_admin);
+  html += renderGrupo(3, nivel3, perfil.es_super_admin);
+  html += '</div>';
+
+  html += '<div class="sec-t">Acceso público (para todos)</div><div class="grid">';
+  html += renderPublico('📎', '4.1 Proveedor', 'proveedor.html', 'Adjunto de cotizaciones');
+  html += renderPublico('🏷️', '5. Listado de precios', 'precios.html', 'Precios y disponibilidad');
+  html += '</div>';
+
+  document.getElementById('wrap').innerHTML = html;
+})();
+</script>
+
+</body>
+</html>

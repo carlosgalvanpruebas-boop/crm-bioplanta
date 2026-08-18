@@ -1,0 +1,544 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Agrotienda Bioplanta · Registro de Clientes</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+:root{--v1:#33513a;--v2:#4f7c5a;--v3:#84a38c;--v4:#a9c2af;--vbg:#eaefeb;--vlt:#f4f8f5;--gris:#f0f4f0;--texto:#1a2e1a;--beige:#e6ceab;--beige-lt:#f4e9d9;--vino:#984745;--vino-lt:#f3e9e9}
+body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--gris);color:var(--texto);min-height:100vh;font-size:14px}
+
+/* HEADER */
+.header{background:linear-gradient(135deg,var(--v1),var(--v2));color:#fff;padding:16px 20px;position:sticky;top:0;z-index:20;box-shadow:0 2px 12px rgba(0,0,0,.25)}
+.hdr-top{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap}
+.logo-wrap{display:flex;align-items:center;gap:10px}
+.logo-ico{font-size:26px}
+.brand{font-size:15px;font-weight:700}
+.brand-sub{font-size:11px;opacity:.75;margin-top:1px}
+.hdr-btns{display:flex;gap:8px;align-items:center}
+.btn-h{background:rgba(255,255,255,.15);border:1px solid rgba(255,255,255,.3);color:#fff;padding:7px 16px;border-radius:20px;font-size:12px;cursor:pointer;transition:background .2s;font-family:inherit;text-decoration:none;display:inline-block}
+.btn-h:hover{background:rgba(255,255,255,.28)}
+.btn-h-act{background:var(--v4);border-color:var(--v4);color:var(--v1);font-weight:700}
+
+/* PILLS COLABORADORAS */
+.colab-bar{margin-top:12px;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.colab-lbl{font-size:12px;opacity:.8;white-space:nowrap}
+.session-badge{background:var(--v4);color:var(--v1);padding:5px 14px;border-radius:16px;font-size:12px;font-weight:700}
+.session-warn{background:#fde8e8;color:#a00;padding:5px 14px;border-radius:16px;font-size:12px;font-weight:600}
+
+/* FORM */
+.form-wrap{max-width:680px;margin:22px auto;padding:0 16px 50px}
+.sec-tag{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--v3);margin-bottom:10px;padding-bottom:4px;border-bottom:2px solid var(--vbg)}
+.row2{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px}
+@media(max-width:500px){.row2{grid-template-columns:1fr}}
+.field{display:flex;flex-direction:column;gap:5px;margin-bottom:12px}
+.field label{font-size:12px;font-weight:600;color:var(--v2)}
+.field input,.field select,.field textarea{border:1.5px solid #b7e4c7;border-radius:8px;padding:10px 12px;font-size:14px;font-family:inherit;outline:none;color:var(--texto);background:#fff;width:100%;transition:border .15s}
+.field input:focus,.field select:focus,.field textarea:focus{border-color:var(--v3);box-shadow:0 0 0 3px rgba(64,145,108,.12)}
+.field textarea{resize:vertical}
+
+/* CHIPS */
+.chips{display:flex;flex-wrap:wrap;gap:7px}
+.chip{background:var(--vlt);border:1.5px solid #b7e4c7;color:var(--v2);padding:6px 14px;border-radius:20px;font-size:13px;cursor:pointer;transition:all .15s;font-family:inherit}
+.chip:hover{background:#e0f5e8}
+.chip.on{background:var(--v2);border-color:var(--v2);color:#fff;font-weight:600}
+
+/* TOGGLE */
+.toggle-g{display:flex;gap:8px}
+.tog{flex:1;padding:9px;border-radius:8px;border:1.5px solid #b7e4c7;background:var(--vlt);color:var(--v2);font-size:13px;cursor:pointer;font-family:inherit;transition:all .15s}
+.tog.on{background:var(--v2);border-color:var(--v2);color:#fff;font-weight:600}
+
+/* BOTÓN */
+.btn-save{width:100%;margin-top:22px;padding:14px;background:linear-gradient(135deg,var(--v1),var(--v2));color:#fff;border:none;border-radius:10px;font-size:15px;font-weight:700;cursor:pointer;font-family:inherit;transition:opacity .2s}
+.btn-save:hover{opacity:.9}
+.btn-save:disabled{opacity:.55;cursor:default}
+.msg{margin-top:14px;padding:10px 14px;border-radius:8px;font-size:14px;text-align:center;display:none}
+.msg.ok{background:var(--vbg);color:var(--v1);display:block}
+.msg.err{background:#fde8e8;color:#a00;display:block}
+
+/* LISTA */
+.lista-wrap{max-width:760px;margin:22px auto;padding:0 16px 50px}
+.fil-bar{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px}
+.fil-bar input,.fil-bar select{border:1.5px solid #b7e4c7;border-radius:8px;padding:8px 12px;font-size:13px;background:#fff;font-family:inherit;outline:none;flex:1;min-width:150px}
+.stats-g{display:flex;gap:10px;margin-bottom:18px;flex-wrap:wrap}
+.stat-box{flex:1;min-width:110px;background:#fff;border-radius:10px;padding:12px 14px;box-shadow:0 1px 4px rgba(0,0,0,.07)}
+.stat-v{font-size:24px;font-weight:800;color:var(--v1)}
+.stat-l{font-size:11px;color:#666;margin-top:2px}
+.cards-g{display:flex;flex-direction:column;gap:10px}
+.card{background:#fff;border-radius:12px;box-shadow:0 1px 6px rgba(0,0,0,.08);border-left:4px solid var(--v3);overflow:hidden}
+.card-top{display:flex;align-items:center;gap:10px;padding:12px 14px 8px}
+.card-av{width:40px;height:40px;border-radius:50%;background:linear-gradient(135deg,var(--v2),var(--v4));color:#fff;display:flex;align-items:center;justify-content:center;font-size:17px;font-weight:800;flex-shrink:0}
+.card-inf{flex:1;min-width:0}
+.card-nom{font-size:15px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.card-met{font-size:12px;color:#555;margin-top:2px;display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+.wha-tag{background:#25d366;color:#fff;font-size:10px;padding:2px 7px;border-radius:10px;font-weight:600}
+.card-dt{font-size:11px;color:#888;white-space:nowrap;flex-shrink:0}
+.card-bod{padding:0 14px 10px;display:flex;flex-wrap:wrap;gap:5px}
+.dato{font-size:12px;color:var(--v2);background:var(--vlt);padding:3px 9px;border-radius:12px}
+.card-ft{padding:4px 14px 10px}
+.colab-t{font-size:11px;color:#999}
+.empty{text-align:center;padding:48px;color:#888;font-size:14px}
+.spin{text-align:center;padding:48px;font-size:28px}
+
+/* CONSENTIMIENTO */
+.consent-box{background:var(--beige-lt);border:1.5px solid var(--vino);border-radius:10px;padding:16px;margin-top:6px}
+.consent-item{margin-bottom:14px}
+.consent-item:last-of-type{margin-bottom:10px}
+.consent-q{font-size:12.5px;font-weight:600;color:var(--vino);margin-bottom:6px;line-height:1.4}
+.consent-q .opt{font-weight:400;color:#8a6a68}
+.consent-note{font-size:11px;color:#8a6a68;margin-top:6px;line-height:1.5}
+.consent-link{color:var(--vino);font-weight:700;text-decoration:underline}
+
+/* CATEGORÍA ECONÓMICA */
+.cat-tag{font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700}
+.cat-grande{background:var(--vino);color:#fff}
+.cat-mediano{background:var(--beige);color:var(--v1)}
+.cat-pequeno{background:var(--vlt);color:var(--v2);border:1px solid #b7e4c7}
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div class="hdr-top">
+    <div class="logo-wrap">
+      <div class="logo-ico">🌱</div>
+      <div>
+        <div class="brand">Registro de Clientes · Mostrador</div>
+        <div class="brand-sub" style="font-style:italic;">Contigo, desde la semilla hasta la cosecha</div>
+      </div>
+    </div>
+    <div class="hdr-btns">
+      <button class="btn-h btn-h-act" id="btn-form">+ Nuevo registro</button>
+      <button class="btn-h" id="btn-lista">Ver registros →</button>
+      <a class="btn-h" href="hub.html">← Hub</a>
+    </div>
+  </div>
+  <div class="colab-bar" id="colab-bar"></div>
+</div>
+
+<div id="app"><div class="spin">⏳</div></div>
+
+<script>
+// ── SUPABASE ──────────────────────────────────────────────────────────────────
+const SUPABASE_URL = 'https://fpqogvxssnoarzgxcitc.supabase.co';
+const SUPABASE_KEY = 'sb_publishable_ccZF-8tenblFEah5lXfd3w_mYTHMtMC';
+const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+// ── DATOS ─────────────────────────────────────────────────────────────────────
+const CULTIVOS  = ["Plátano","Banano","Palma","Cacao","Maracuyá","Arroz","Maíz","Yuca","Aguacate","Otro"];
+const PRODUCTOS = ["Herbicidas","Fungicidas","Insecticidas","Fertilizantes foliares","Fertilizantes edáficos","Bioinsumos","Semillas","Equipos y herramientas"];
+
+// Umbrales de área (hectáreas) para categorizar importancia económica.
+// PENDIENTE DE CONFIRMAR CON CARLOS — ajustar estos dos números según el criterio real del negocio.
+const AREA_THRESHOLDS = { pequeno: 2, mediano: 10 };
+function categoriaEconomica(area) {
+  const a = parseFloat(area);
+  if (area === null || area === undefined || isNaN(a)) return null;
+  if (a > AREA_THRESHOLDS.mediano) return "Grande";
+  if (a > AREA_THRESHOLDS.pequeno) return "Mediano";
+  return "Pequeño";
+}
+function catClass(cat) {
+  return cat === "Grande" ? "cat-grande" : cat === "Mediano" ? "cat-mediano" : "cat-pequeno";
+}
+
+// ── USUARIO ACTUAL (a partir de la sesión real de Supabase Auth) ──────────────
+function renderColabBar() {
+  const el = document.getElementById("colab-bar");
+  if (!el) return;
+  el.innerHTML = colaboradora
+    ? `<span class="colab-lbl">Registrando como:</span><span class="session-badge">${colaboradora}</span>`
+    : `<span class="session-warn">⚠️ No se pudo identificar tu perfil — pídele a Carlos que te lo cree en el Panel de Accesos</span>`;
+}
+
+// ── ESTADO ────────────────────────────────────────────────────────────────────
+let colaboradora     = "";
+let cultivoSel       = null;
+let prodsSel         = [];
+let consentGeneral   = null;  // 'si' | 'no' | null (sin responder) — Autorización #1, obligatoria
+let consentSensibles = "no";  // 'si' | 'no' — Autorización #2, opcional (default: no autorizo)
+let consentComs      = null;  // 'si' | 'no' | null (sin responder) — Autorización #3, obligatoria
+let vista        = "form";
+let clientes     = [];
+let busqueda     = "";
+let filtColab    = "todas";
+let filtCat      = "todas";
+
+// ── RENDER ────────────────────────────────────────────────────────────────────
+function render() {
+  document.getElementById("app").innerHTML = vista === "form" ? htmlForm() : htmlLista();
+  bind();
+}
+
+function htmlForm() {
+  const chips_cult = CULTIVOS.map(c =>
+    `<button class="chip${cultivoSel===c?" on":""}" data-cult="${c}">${c}</button>`
+  ).join("");
+
+  const chips_prod = PRODUCTOS.map(p =>
+    `<button class="chip${prodsSel.includes(p)?" on":""}" data-prod="${p}">${p}</button>`
+  ).join("");
+
+  return `
+  <div class="form-wrap">
+    <div class="sec-tag">Datos del cliente</div>
+    <div class="row2">
+      <div class="field"><label>Nombre completo *</label>
+        <input type="text" id="f-nom" placeholder="Juan Carlos Restrepo" autocomplete="off">
+      </div>
+      <div class="field"><label>Cédula</label>
+        <input type="number" id="f-ced" placeholder="1045000000">
+      </div>
+    </div>
+    <div class="row2">
+      <div class="field"><label>Teléfono / WhatsApp *</label>
+        <input type="tel" id="f-tel" placeholder="300 000 0000">
+      </div>
+      <div class="field"><label>Municipio</label>
+        <select id="f-lugar">
+          <option value="">Seleccionar municipio…</option>
+          <option>Chigorodó</option>
+          <option>Apartadó</option>
+          <option>Carepa</option>
+          <option>Mutatá</option>
+          <option>Turbo</option>
+          <option>Belén de Bajirá</option>
+          <option>Muindó</option>
+          <option>Riosucio</option>
+          <option>Acandí</option>
+          <option>Unguía</option>
+          <option>Necoclí</option>
+          <option>San Juan de Urabá</option>
+          <option>Arboletes</option>
+          <option>Vigía del Fuerte</option>
+          <option>Otro</option>
+        </select>
+      </div>
+    </div>
+    <div class="row2">
+      <div class="field"><label>Vereda</label>
+        <input type="text" id="f-vereda" placeholder="ej. La Esperanza" autocomplete="off">
+      </div>
+      <div class="field"><label>Área que posee (hectáreas)</label>
+        <input type="number" id="f-area" placeholder="ej. 5.5" step="0.1" min="0">
+      </div>
+    </div>
+
+    <div class="sec-tag" style="margin-top:20px">Perfil agrícola</div>
+    <div class="field">
+      <label>Cultivo principal</label>
+      <div class="chips">${chips_cult}</div>
+    </div>
+    <div class="field" style="margin-top:12px">
+      <label>Productos que usa frecuentemente</label>
+      <div class="chips">${chips_prod}</div>
+    </div>
+
+    <div class="sec-tag" style="margin-top:20px">Comunicación</div>
+    <div class="field">
+      <label>¿Cómo llegó a la tienda?</label>
+      <select id="f-como">
+        <option value="">Seleccionar…</option>
+        <option>Referido de otro cliente</option>
+        <option>Promotor de campo</option>
+        <option>Redes sociales</option>
+        <option>Paso por la tienda</option>
+        <option>Proveedor / técnico</option>
+        <option>Otro</option>
+      </select>
+    </div>
+    <div class="field"><label>Nota adicional (opcional)</label>
+      <textarea id="f-nota" rows="2" placeholder="Ej. Interesado en capacitación de fungicidas…"></textarea>
+    </div>
+
+    <div class="sec-tag" style="margin-top:20px">Autorización — Tratamiento de datos personales (Ley 1581 de 2012)</div>
+    <div class="consent-box">
+      <div style="font-size:12.5px;color:var(--vino);margin-bottom:14px;line-height:1.5;">
+        Manifiesto que Bioplanta me informó sobre la finalidad del tratamiento de mis datos personales y sobre mis derechos como titular, según la Ley 1581 de 2012 y el <a class="consent-link" href="#" target="_blank" rel="noopener">documento de Política de Tratamiento de Datos</a>.
+      </div>
+
+      <div class="consent-item">
+        <div class="consent-q">1. Tratamiento general de mis datos personales <span class="opt">(finalidades comerciales, contractuales, legales y administrativas) *</span></div>
+        <div class="toggle-g">
+          <button class="tog${consentGeneral==="si"?" on":""}" data-cg="si">✓ Sí autorizo</button>
+          <button class="tog${consentGeneral==="no"?" on":""}" data-cg="no">✗ No autorizo</button>
+        </div>
+      </div>
+
+      <div class="consent-item">
+        <div class="consent-q">2. Tratamiento de mis datos sensibles <span class="opt">(biométricos, de salud u otros — opcional)</span></div>
+        <div class="toggle-g">
+          <button class="tog${consentSensibles==="si"?" on":""}" data-cs="si">✓ Sí autorizo</button>
+          <button class="tog${consentSensibles==="no"?" on":""}" data-cs="no">✗ No autorizo</button>
+        </div>
+      </div>
+
+      <div class="consent-item">
+        <div class="consent-q">3. Recibir comunicaciones comerciales o publicitarias <span class="opt">(correo, SMS, WhatsApp o llamada) *</span></div>
+        <div class="toggle-g">
+          <button class="tog${consentComs==="si"?" on":""}" data-cc="si">✓ Sí autorizo</button>
+          <button class="tog${consentComs==="no"?" on":""}" data-cc="no">✗ No autorizo</button>
+        </div>
+      </div>
+
+      <div class="consent-note">El titular puede revocar esta autorización en cualquier momento escribiendo a coord.comercialagro@bioplanta.co.</div>
+    </div>
+
+    <button class="btn-save" id="btn-guardar">Guardar registro</button>
+    <div class="msg" id="msg"></div>
+  </div>`;
+}
+
+function htmlLista() {
+  const filtrados = clientes.filter(c => {
+    const mc = filtColab === "todas" || c.colaboradora === filtColab;
+    const mb = !busqueda ||
+      (c.nombre||"").toLowerCase().includes(busqueda.toLowerCase()) ||
+      (c.telefono||"").includes(busqueda);
+    const cat = categoriaEconomica(c.area_hectareas);
+    const mcat = filtCat === "todas" || cat === filtCat;
+    return mc && mb && mcat;
+  });
+
+  const hoy = new Date().toDateString();
+  const hoyN = clientes.filter(c => {
+    const f = c.creado_en ? new Date(c.creado_en) : new Date(0);
+    return f.toDateString() === hoy;
+  }).length;
+
+  const colabs = [...new Set(clientes.map(c=>c.colaboradora).filter(Boolean))];
+  const optsColab = colabs.map(n =>
+    `<option value="${n}"${filtColab===n?" selected":""}>${n}</option>`
+  ).join("");
+
+  const cardsHtml = filtrados.length === 0
+    ? `<div class="empty">No hay registros que coincidan</div>`
+    : filtrados.map(c => {
+        const fecha = c.creado_en ? new Date(c.creado_en) : new Date(0);
+        const fs = fecha.toLocaleDateString("es-CO",{day:"2-digit",month:"short",year:"numeric"});
+        const ubicacion = [c.municipio, c.vereda ? `Vereda ${c.vereda}` : ""].filter(Boolean).join(" · ");
+        const cat = categoriaEconomica(c.area_hectareas);
+        const datos = [
+          ubicacion ? `<span class="dato">📍 ${ubicacion}</span>` : "",
+          c.cultivo ? `<span class="dato">🌾 ${c.cultivo}</span>` : "",
+          (c.area_hectareas!=null) ? `<span class="dato">📐 ${c.area_hectareas} ha</span>` : "",
+          c.productos?.length ? `<span class="dato">🧪 ${c.productos.join(", ")}</span>` : "",
+          c.como_llego ? `<span class="dato">🗺 ${c.como_llego}</span>` : "",
+        ].join("");
+        const whaTag = c.whatsapp==="si" ? `<span class="wha-tag">WhatsApp ✓</span>` : "";
+        const catTag = cat ? `<span class="cat-tag ${catClass(cat)}">${cat}</span>` : "";
+        const consentTag = c.acepta_datos ? "" : `<span class="dato" style="color:#a00;background:#fde8e8">⚠️ Sin autorización de datos</span>`;
+        return `
+        <div class="card">
+          <div class="card-top">
+            <div class="card-av">${(c.nombre||"?")[0].toUpperCase()}</div>
+            <div class="card-inf">
+              <div class="card-nom">${c.nombre||"Sin nombre"} ${catTag}</div>
+              <div class="card-met">${c.telefono||"—"} ${whaTag}</div>
+            </div>
+            <div class="card-dt">${fs}</div>
+          </div>
+          <div class="card-bod">${datos} ${consentTag}</div>
+          <div class="card-ft"><span class="colab-t">Por: ${c.colaboradora||"—"}</span></div>
+        </div>`;
+      }).join("");
+
+  return `
+  <div class="lista-wrap">
+    <div class="fil-bar">
+      <input type="search" id="busq" placeholder="🔍 Buscar nombre o teléfono…" value="${busqueda}">
+      <select id="fil-colab">
+        <option value="todas">Todas las colaboradoras</option>
+        ${optsColab}
+      </select>
+      <select id="fil-cat">
+        <option value="todas"${filtCat==="todas"?" selected":""}>Todas las categorías</option>
+        <option value="Grande"${filtCat==="Grande"?" selected":""}>Grande (&gt;${AREA_THRESHOLDS.mediano} ha)</option>
+        <option value="Mediano"${filtCat==="Mediano"?" selected":""}>Mediano (${AREA_THRESHOLDS.pequeno}-${AREA_THRESHOLDS.mediano} ha)</option>
+        <option value="Pequeño"${filtCat==="Pequeño"?" selected":""}>Pequeño (&lt;${AREA_THRESHOLDS.pequeno} ha)</option>
+      </select>
+    </div>
+    <div class="stats-g">
+      <div class="stat-box" style="border-left:4px solid var(--v2)">
+        <div class="stat-v">${clientes.length}</div><div class="stat-l">Total registros</div>
+      </div>
+      <div class="stat-box" style="border-left:4px solid var(--v3)">
+        <div class="stat-v">${clientes.filter(c=>c.whatsapp==="si").length}</div><div class="stat-l">Acepta WhatsApp</div>
+      </div>
+      <div class="stat-box" style="border-left:4px solid var(--v1)">
+        <div class="stat-v">${clientes.filter(c=>categoriaEconomica(c.area_hectareas)==="Grande").length}</div><div class="stat-l">Grandes productores</div>
+      </div>
+      <div class="stat-box" style="border-left:4px solid var(--v4)">
+        <div class="stat-v">${hoyN}</div><div class="stat-l">Hoy</div>
+      </div>
+    </div>
+    <div class="cards-g">${cardsHtml}</div>
+  </div>`;
+}
+
+// ── BIND ──────────────────────────────────────────────────────────────────────
+function bind() {
+  // Cultivos
+  document.querySelectorAll("[data-cult]").forEach(b => {
+    b.addEventListener("click", () => {
+      cultivoSel = cultivoSel === b.dataset.cult ? null : b.dataset.cult;
+      document.querySelectorAll("[data-cult]").forEach(x =>
+        x.classList.toggle("on", x.dataset.cult === cultivoSel)
+      );
+    });
+  });
+
+  // Productos
+  document.querySelectorAll("[data-prod]").forEach(b => {
+    b.addEventListener("click", () => {
+      const p = b.dataset.prod;
+      if (prodsSel.includes(p)) {
+        prodsSel = prodsSel.filter(x => x !== p);
+        b.classList.remove("on");
+      } else {
+        prodsSel.push(p);
+        b.classList.add("on");
+      }
+    });
+  });
+
+  // Autorización #1: tratamiento general
+  document.querySelectorAll("[data-cg]").forEach(b => {
+    b.addEventListener("click", () => {
+      consentGeneral = b.dataset.cg;
+      document.querySelectorAll("[data-cg]").forEach(x =>
+        x.classList.toggle("on", x.dataset.cg === consentGeneral)
+      );
+    });
+  });
+
+  // Autorización #2: datos sensibles (opcional)
+  document.querySelectorAll("[data-cs]").forEach(b => {
+    b.addEventListener("click", () => {
+      consentSensibles = b.dataset.cs;
+      document.querySelectorAll("[data-cs]").forEach(x =>
+        x.classList.toggle("on", x.dataset.cs === consentSensibles)
+      );
+    });
+  });
+
+  // Autorización #3: comunicaciones comerciales/publicitarias
+  document.querySelectorAll("[data-cc]").forEach(b => {
+    b.addEventListener("click", () => {
+      consentComs = b.dataset.cc;
+      document.querySelectorAll("[data-cc]").forEach(x =>
+        x.classList.toggle("on", x.dataset.cc === consentComs)
+      );
+    });
+  });
+
+  // Guardar
+  document.getElementById("btn-guardar")?.addEventListener("click", async () => {
+    const nombre   = (document.getElementById("f-nom")?.value || "").trim();
+    const tel      = (document.getElementById("f-tel")?.value || "").trim();
+    const areaVal  = document.getElementById("f-area")?.value;
+
+    if (!nombre)             { showMsg("⚠️ El nombre es obligatorio", "err"); return; }
+    if (!tel)                { showMsg("⚠️ El teléfono es obligatorio", "err"); return; }
+    if (!colaboradora)       { showMsg("⚠️ No se identificó tu perfil — recarga la página o avísale a Carlos", "err"); return; }
+    if (!consentGeneral)     { showMsg("⚠️ Falta registrar la autorización #1 (tratamiento general de datos)", "err"); return; }
+    if (!consentComs)        { showMsg("⚠️ Falta registrar la autorización #3 (comunicaciones comerciales)", "err"); return; }
+
+    const btn = document.getElementById("btn-guardar");
+    btn.disabled = true;
+    btn.textContent = "Guardando…";
+
+    try {
+      const { error } = await sb.from("clientes_agrotienda").insert({
+        nombre,
+        cedula:         (document.getElementById("f-ced")?.value || "").trim() || null,
+        telefono:       tel,
+        municipio:      (document.getElementById("f-lugar")?.value || "").trim() || null,
+        vereda:         (document.getElementById("f-vereda")?.value || "").trim() || null,
+        area_hectareas: areaVal ? parseFloat(areaVal) : null,
+        cultivo:        cultivoSel,
+        productos:      [...prodsSel],
+        como_llego:      document.getElementById("f-como")?.value || null,
+        whatsapp:        consentComs,
+        nota:            (document.getElementById("f-nota")?.value || "").trim() || null,
+        colaboradora,
+        acepta_datos:    consentGeneral === "si",
+        datos_sensibles: consentSensibles === "si",
+      });
+      if (error) throw error;
+      showMsg("✅ Cliente registrado correctamente", "ok");
+      cultivoSel       = null;
+      prodsSel         = [];
+      consentGeneral   = null;
+      consentSensibles = "no";
+      consentComs      = null;
+      setTimeout(() => render(), 2000);
+    } catch(e) {
+      showMsg("❌ Error al guardar. Intenta de nuevo.", "err");
+      btn.disabled  = false;
+      btn.textContent = "Guardar registro";
+    }
+  });
+
+  // Nav lista
+  document.getElementById("btn-lista")?.addEventListener("click", async () => {
+    document.getElementById("app").innerHTML = `<div class="spin">⏳</div>`;
+    try {
+      const { data, error } = await sb.from("clientes_agrotienda").select("*").order("creado_en", { ascending: false });
+      if (error) throw error;
+      clientes = data || [];
+    } catch(e) { clientes = []; }
+    vista = "lista";
+    render();
+  });
+
+  document.getElementById("btn-form")?.addEventListener("click", () => {
+    vista = "form";
+    render();
+  });
+
+  // Filtros lista
+  document.getElementById("busq")?.addEventListener("input", e => {
+    busqueda = e.target.value;
+    render();
+  });
+  document.getElementById("fil-colab")?.addEventListener("change", e => {
+    filtColab = e.target.value;
+    render();
+  });
+  document.getElementById("fil-cat")?.addEventListener("change", e => {
+    filtCat = e.target.value;
+    render();
+  });
+}
+
+function showMsg(txt, tipo) {
+  const el = document.getElementById("msg");
+  if (!el) return;
+  el.textContent = txt;
+  el.className   = "msg " + tipo;
+  if (tipo === "ok") setTimeout(() => { el.className = "msg"; }, 3000);
+}
+
+// ── INIT — exige sesión real y toma el nombre de "perfiles" ────────────────────
+(async () => {
+  const { data: { session } } = await sb.auth.getSession();
+  if (!session) { window.location.href = "login.html"; return; }
+
+  const { data: perfil } = await sb.from("perfiles").select("*").eq("id", session.user.id).single();
+
+  if (!perfil) {
+    document.getElementById("app").innerHTML = '<div class="empty">Tu usuario no tiene un perfil configurado todavía. Pídele a Carlos que te lo cree en el Panel de Accesos.</div>';
+    return;
+  }
+
+  colaboradora = perfil.nombre;
+  renderColabBar();
+  render();
+})();
+</script>
+
+</body>
+</html>

@@ -1,0 +1,266 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Agrotienda Bioplanta · Carga de ventas</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+:root{--v1:#33513a;--v2:#4f7c5a;--v3:#84a38c;--v4:#a9c2af;--vbg:#eaefeb;--vlt:#f4f8f5;--texto:#1a2e1a;--beige:#e6ceab;--vino:#984745}
+body{font-family:'Segoe UI',system-ui,sans-serif;background:#f0f4f0;color:var(--texto);min-height:100vh}
+.header{background:linear-gradient(135deg,var(--v1),var(--v2));color:#fff;padding:16px 20px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;box-shadow:0 2px 12px rgba(0,0,0,.2)}
+.hdr-l{display:flex;align-items:center;gap:10px}
+.logo-ico{font-size:26px}
+.brand{font-size:15px;font-weight:800}
+.brand-sub{font-size:11px;opacity:.8}
+.btn-h{background:rgba(255,255,255,.15);border:1px solid rgba(255,255,255,.3);color:#fff;padding:7px 16px;border-radius:20px;font-size:12px;cursor:pointer;font-family:inherit;text-decoration:none}
+
+.wrap{max-width:900px;margin:0 auto;padding:18px 18px 60px}
+.loading{text-align:center;padding:80px;color:#888}
+
+.aviso{background:var(--beige);color:var(--v1);border-radius:10px;padding:12px 16px;font-size:12.5px;margin-bottom:16px;line-height:1.5}
+.card{background:#fff;border-radius:16px;padding:20px;box-shadow:0 2px 10px rgba(0,0,0,.07);margin-bottom:18px}
+.card h3{font-size:14px;color:var(--v1);margin-bottom:10px}
+
+.drop{border:2px dashed #b7d0bb;border-radius:12px;padding:30px;text-align:center;color:#777;font-size:13px}
+input[type=file]{margin-top:12px}
+.btn{background:var(--v2);color:#fff;border:none;border-radius:8px;padding:10px 18px;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit}
+.btn:disabled{opacity:.5;cursor:default}
+.btn-sec{background:var(--vbg);color:var(--v1)}
+
+table{width:100%;border-collapse:collapse;font-size:12px;margin-top:10px}
+th,td{text-align:left;padding:6px 8px;border-bottom:1px solid var(--vbg)}
+th{color:var(--v2);font-size:11px;text-transform:uppercase}
+
+.resumen{display:flex;gap:10px;flex-wrap:wrap;margin:14px 0}
+.chip-r{background:var(--vlt);color:var(--v2);padding:8px 14px;border-radius:10px;font-size:12.5px;font-weight:700}
+.chip-r.nuevo{background:#e6f4ea;color:#256d3b}
+.chip-r.elim{background:#fde3e2;color:var(--vino)}
+
+.msg{padding:10px 14px;border-radius:8px;font-size:13px;margin-top:10px}
+.msg.ok{background:#e6f4ea;color:#256d3b}
+.msg.err{background:#fde3e2;color:var(--vino)}
+
+.hist-row{display:flex;justify-content:space-between;gap:10px;padding:8px 0;border-bottom:1px solid var(--vbg);font-size:12px}
+.hist-row:last-child{border-bottom:none}
+.hist-estado{font-size:10px;font-weight:700;padding:2px 8px;border-radius:8px}
+.hist-ok{background:#e6f4ea;color:#256d3b}
+.hist-error{background:#fde3e2;color:var(--vino)}
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div class="hdr-l">
+    <div class="logo-ico">🧾</div>
+    <div>
+      <div class="brand">Carga de ventas</div>
+      <div class="brand-sub">Sube el Excel de SAP y el sistema agrega el histórico de ventas</div>
+    </div>
+  </div>
+  <a class="btn-h" href="cargar-informacion.html">← Cargar información</a>
+</div>
+
+<div class="wrap" id="wrap">
+  <div class="loading">Cargando...</div>
+</div>
+
+<script>
+const SUPABASE_URL = 'https://fpqogvxssnoarzgxcitc.supabase.co';
+const SUPABASE_KEY = 'sb_publishable_ccZF-8tenblFEah5lXfd3w_mYTHMtMC';
+const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+// Alias de encabezados posibles — no sabemos todavía el nombre exacto que
+// trae el reporte de ventas de SAP, así que se cubren varias variantes
+// comunes. Si al subir el primer archivo real la vista previa muestra
+// columnas vacías o mal ubicadas, se ajusta esta lista (mismo tipo de
+// ajuste que hubo que hacer con el cargador de inventario).
+const ALIAS = {
+  factura: ['numero de factura', 'número de factura', 'no. factura', 'factura', 'documento'],
+  fecha: ['fecha de factura', 'fecha factura', 'fecha venta', 'fecha'],
+  codigo_sap: ['numero de articulo', 'número de artículo', 'codigo sap', 'código sap', 'codigo', 'código', 'item code'],
+  producto: ['descripcion', 'descripción', 'nombre', 'producto', 'item name'],
+  cantidad: ['cantidad vendida', 'cantidad', 'unidades'],
+  valor: ['valor total', 'valor', 'total', 'importe'],
+  cliente: ['nombre del cliente', 'razon social', 'razón social', 'cliente'],
+  cliente_nit: ['nit', 'identificacion', 'identificación', 'cedula/nit', 'cédula/nit'],
+  vendedor: ['empleado de ventas', 'asesor', 'vendedor'],
+};
+function normaliza(s) {
+  return String(s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').trim();
+}
+function mapaColumnas(headers) {
+  const norm = headers.map(normaliza);
+  const mapa = {};
+  Object.entries(ALIAS).forEach(([campo, alias]) => {
+    for (const a of alias) {
+      const idx = norm.indexOf(a);
+      if (idx !== -1) { mapa[campo] = headers[idx]; break; }
+    }
+  });
+  return mapa;
+}
+
+let filas = [];
+let sesionActual = null;
+let mensajeResultado = '';
+
+function render() {
+  const preview = filas.slice(0, 5);
+  const cols = preview.length ? Object.keys(preview[0]) : [];
+
+  document.getElementById('wrap').innerHTML = `
+    <div class="aviso">
+      ℹ️ Esta pantalla <b>agrega</b> al histórico de ventas — no reemplaza ni borra nada (a diferencia de la carga de inventario). Si subes el mismo archivo dos veces, o rangos de fecha que se solapan, las líneas repetidas (misma factura + mismo artículo) se actualizan, no se duplican. Los artículos de grupos ya marcados como "no son de Agrotienda" (ver carga de inventario) se excluyen automáticamente.
+    </div>
+    <div class="card">
+      <h3>1. Selecciona el archivo Excel</h3>
+      <div class="drop">
+        📄 Arrastra o selecciona el archivo de ventas exportado de SAP (.xlsx)
+        <br><input type="file" id="f-archivo" accept=".xlsx,.xls">
+      </div>
+      ${mensajeResultado}
+    </div>
+    ${filas.length ? `
+    <div class="card">
+      <h3>2. Vista previa (${filas.length} líneas detectadas)</h3>
+      <table>
+        <thead><tr>${cols.map(c => `<th>${c}</th>`).join('')}</tr></thead>
+        <tbody>
+          ${preview.map(f => `<tr>${cols.map(c => `<td>${f[c] ?? '—'}</td>`).join('')}</tr>`).join('')}
+        </tbody>
+      </table>
+      <button class="btn" id="btn-confirmar" style="margin-top:14px">✅ Confirmar y cargar ${filas.length} líneas</button>
+      <button class="btn btn-sec" id="btn-cancelar" style="margin-top:14px">Cancelar</button>
+    </div>` : ''}
+    <div class="card">
+      <h3>Historial de cargas</h3>
+      <div id="historial">Cargando historial...</div>
+    </div>
+  `;
+  bind();
+  cargarHistorial();
+}
+
+function bind() {
+  document.getElementById('f-archivo')?.addEventListener('change', async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    mensajeResultado = '';
+    const buf = await file.arrayBuffer();
+    const wb = XLSX.read(buf, { type: 'array', cellDates: true });
+    const hoja = wb.Sheets[wb.SheetNames[0]];
+    const json = XLSX.utils.sheet_to_json(hoja, { defval: null });
+    if (!json.length) { alert('El archivo no tiene filas.'); return; }
+
+    const headers = Object.keys(json[0]);
+    const mapa = mapaColumnas(headers);
+    if (!mapa.factura || !mapa.producto) {
+      alert('No se encontró una columna de factura y/o descripción del producto. Revisa que el archivo tenga esos datos, o avísale a Claude para ajustar los nombres de columna reconocidos.');
+      return;
+    }
+
+    filas = json.map(row => ({
+      factura: String(row[mapa.factura] || '').trim(),
+      producto: String(row[mapa.producto] || '').trim(),
+      codigo_sap: mapa.codigo_sap ? String(row[mapa.codigo_sap] || '').trim() : '',
+      fecha: mapa.fecha ? row[mapa.fecha] : null,
+      cantidad: mapa.cantidad ? row[mapa.cantidad] : 0,
+      valor: mapa.valor ? row[mapa.valor] : 0,
+      cliente: mapa.cliente ? String(row[mapa.cliente] || '').trim() : null,
+      cliente_nit: mapa.cliente_nit ? String(row[mapa.cliente_nit] || '').trim() : null,
+      vendedor: mapa.vendedor ? String(row[mapa.vendedor] || '').trim() : null,
+    })).filter(f => f.factura && f.producto);
+
+    render();
+  });
+
+  document.getElementById('btn-cancelar')?.addEventListener('click', () => {
+    filas = [];
+    mensajeResultado = '';
+    render();
+  });
+
+  document.getElementById('btn-confirmar')?.addEventListener('click', async () => {
+    const btn = document.getElementById('btn-confirmar');
+    btn.disabled = true;
+    btn.textContent = 'Cargando...';
+    try {
+      const resp = await fetch('/api/cargar-ventas', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${sesionActual.access_token}`,
+        },
+        body: JSON.stringify({ ventas: filas }),
+      });
+      const data = await resp.json();
+      if (!resp.ok) {
+        mensajeResultado = `<div class="msg err">❌ ${data.error || 'No se pudo cargar'}</div>`;
+      } else {
+        mensajeResultado = `
+          <div class="resumen">
+            <span class="chip-r nuevo">${data.procesadas} procesadas</span>
+            ${data.omitidosPorGrupo ? `<span class="chip-r elim">${data.omitidosPorGrupo} omitidas (grupos excluidos)</span>` : ''}
+            ${data.duplicadosColapsados ? `<span class="chip-r">${data.duplicadosColapsados} duplicadas en el archivo</span>` : ''}
+            ${data.sinFacturaOProducto ? `<span class="chip-r elim">${data.sinFacturaOProducto} sin factura/producto</span>` : ''}
+          </div>
+          <div class="msg ok">✅ Ventas cargadas correctamente.</div>
+        `;
+        filas = [];
+      }
+    } catch (e) {
+      mensajeResultado = `<div class="msg err">❌ Error de red: ${e.message}</div>`;
+    }
+    render();
+    cargarHistorial();
+  });
+}
+
+function fmtFechaHora(iso) {
+  if (!iso) return '—';
+  return new Date(iso).toLocaleString('es-CO', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+}
+
+async function cargarHistorial() {
+  const el = document.getElementById('historial');
+  if (!el) return;
+  const { data, error } = await sb.from('sync_log').select('*').eq('modulo', 'ventas').order('fecha', { ascending: false }).limit(10);
+  if (error) { el.innerHTML = `<div style="color:#999;font-size:12px">No se pudo cargar el historial.</div>`; return; }
+  if (!data || !data.length) { el.innerHTML = `<div style="color:#999;font-size:12px">Todavía no hay cargas registradas.</div>`; return; }
+  el.innerHTML = data.map(l => `
+    <div class="hist-row">
+      <span>${fmtFechaHora(l.fecha)}</span>
+      <span style="flex:1;padding:0 10px">${l.mensaje || '—'}</span>
+      <span class="hist-estado ${l.status === 'ok' ? 'hist-ok' : 'hist-error'}">${l.status}</span>
+    </div>
+  `).join('');
+}
+
+(async () => {
+  const { data: { session } } = await sb.auth.getSession();
+  if (!session) { window.location.href = 'login.html'; return; }
+  sesionActual = session;
+
+  const { data: perfil } = await sb.from('perfiles').select('*').eq('id', session.user.id).single();
+  if (!perfil) {
+    document.getElementById('wrap').innerHTML = '<div class="loading">Tu usuario no tiene un perfil configurado todavía.</div>';
+    return;
+  }
+
+  const cargo = (perfil.cargo || '').toLowerCase();
+  const autorizado = perfil.es_super_admin || cargo.includes('almacén') || cargo.includes('almacen');
+
+  if (!autorizado) {
+    document.getElementById('wrap').innerHTML = '<div class="loading">No tienes permiso para usar esta pantalla.</div>';
+    return;
+  }
+
+  render();
+})();
+</script>
+
+</body>
+</html>

@@ -1,0 +1,434 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Agrotienda Bioplanta · Resumen de inventario</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+:root{--v1:#33513a;--v2:#4f7c5a;--v3:#84a38c;--v4:#a9c2af;--vbg:#eaefeb;--vlt:#f4f8f5;--texto:#1a2e1a;--beige:#e6ceab;--vino:#984745}
+body{font-family:'Segoe UI',system-ui,sans-serif;background:#f0f4f0;color:var(--texto);min-height:100vh}
+.header{background:linear-gradient(135deg,var(--v1),var(--v2));color:#fff;padding:16px 20px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;box-shadow:0 2px 12px rgba(0,0,0,.2)}
+.hdr-l{display:flex;align-items:center;gap:10px}
+.logo-ico{font-size:26px}
+.brand{font-size:15px;font-weight:800}
+.brand-sub{font-size:11px;opacity:.8}
+.btn-h{background:rgba(255,255,255,.15);border:1px solid rgba(255,255,255,.3);color:#fff;padding:7px 16px;border-radius:20px;font-size:12px;cursor:pointer;font-family:inherit;text-decoration:none}
+
+.nav{max-width:1000px;margin:16px auto 0;padding:0 18px;display:flex;gap:8px;flex-wrap:wrap}
+.btn-nav{background:#fff;border:1.5px solid var(--v3);color:var(--v2);padding:9px 16px;border-radius:20px;font-size:12.5px;font-weight:700;cursor:pointer;font-family:inherit}
+.btn-nav.act{background:var(--v2);color:#fff;border-color:var(--v2)}
+
+.wrap{max-width:1000px;margin:0 auto;padding:18px 18px 60px}
+.loading{text-align:center;padding:80px;color:#888}
+.aviso{background:var(--beige);color:var(--v1);border-radius:10px;padding:12px 16px;font-size:12.5px;margin-bottom:16px;line-height:1.5}
+
+.card{background:#fff;border-radius:16px;padding:20px;box-shadow:0 2px 10px rgba(0,0,0,.07);margin-bottom:16px}
+.card-t{font-size:14.5px;font-weight:800;color:var(--v1);margin-bottom:4px}
+.card-sub{font-size:12px;color:#777;margin-bottom:14px}
+.card.mio{border:2px solid var(--v2)}
+
+.badge{font-size:10.5px;font-weight:700;padding:3px 10px;border-radius:10px;white-space:nowrap}
+.b-pendiente{background:var(--beige);color:var(--v1)}
+.b-en_proceso{background:#e6f4ea;color:#256d3b}
+.b-completado{background:var(--v1);color:#fff}
+.b-rutinario{background:var(--vbg);color:var(--v1)}
+.b-sorpresa{background:#fde3e2;color:var(--vino)}
+
+.sorteo-top{display:flex;justify-content:space-between;align-items:flex-start;gap:10px;flex-wrap:wrap}
+.sorteo-grupo{font-size:15px;font-weight:800;color:var(--v1)}
+.sorteo-meta{font-size:12px;color:#777;margin-top:2px}
+
+.field{display:flex;flex-direction:column;gap:5px;margin-bottom:10px}
+.field label{font-size:12px;font-weight:600;color:var(--v2)}
+.field input,.field select,.field textarea{border:1.5px solid #d6e2d9;border-radius:8px;padding:9px 10px;font-size:13.5px;font-family:inherit;outline:none}
+.btn-save{background:linear-gradient(135deg,var(--v1),var(--v2));color:#fff;border:none;padding:10px 18px;border-radius:10px;font-size:12.5px;font-weight:700;cursor:pointer;font-family:inherit}
+.btn-save:disabled{opacity:.6}
+.btn-mini{border:none;border-radius:7px;padding:8px 12px;font-size:11px;cursor:pointer;font-family:inherit;font-weight:700;background:var(--v2);color:#fff;white-space:nowrap}
+.btn-mini.sec{background:var(--vbg);color:var(--v1)}
+.msg{margin-top:10px;padding:9px 11px;border-radius:8px;font-size:12px}
+.msg.err{background:#fde8e8;color:#a00}
+.msg.ok{background:#e6f4ea;color:#256d3b}
+
+.sugeridos{display:flex;gap:6px;flex-wrap:wrap;margin:10px 0}
+.chip-sug{background:var(--vlt);color:var(--v2);border:1px solid var(--v3);border-radius:14px;padding:5px 11px;font-size:11.5px;cursor:pointer;font-family:inherit}
+
+.fila-conteo{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--vbg);flex-wrap:wrap}
+.fila-conteo:last-child{border-bottom:none}
+.fc-prod{font-size:13px;font-weight:700;color:var(--v1);min-width:160px}
+.fc-num{width:90px;border:1.5px solid #d6e2d9;border-radius:7px;padding:6px 8px;font-size:12.5px;font-family:inherit}
+.fc-dif{font-size:12px;font-weight:700;min-width:60px;text-align:center}
+.fc-dif.pos{color:#256d3b}
+.fc-dif.neg{color:var(--vino)}
+
+.filtro-row{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px}
+.filtro-row button{background:#fff;border:1.5px solid var(--v3);color:var(--v2);padding:6px 13px;border-radius:16px;font-size:11.5px;font-weight:700;cursor:pointer;font-family:inherit}
+.filtro-row button.act{background:var(--v2);color:#fff;border-color:var(--v2)}
+.desc-item{padding:12px 0;border-bottom:1px solid var(--vbg)}
+.desc-item:last-child{border-bottom:none}
+.desc-top{display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap}
+.desc-prod{font-size:13.5px;font-weight:800;color:var(--v1)}
+.desc-meta{font-size:11.5px;color:#888;margin-top:2px}
+.vacio{text-align:center;padding:30px;color:#999;font-size:13px}
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div class="hdr-l">
+    <div class="logo-ico">🧮</div>
+    <div>
+      <div class="brand">Resumen de inventario</div>
+      <div class="brand-sub">Preconteo semanal y descuadres físico vs. SAP</div>
+    </div>
+  </div>
+  <a class="btn-h" href="hub.html">← Hub</a>
+</div>
+
+<div class="nav" id="nav"></div>
+<div class="wrap" id="wrap"><div class="loading">Cargando...</div></div>
+
+<script>
+const SUPABASE_URL = 'https://fpqogvxssnoarzgxcitc.supabase.co';
+const SUPABASE_KEY = 'sb_publishable_ccZF-8tenblFEah5lXfd3w_mYTHMtMC';
+const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+const SEDES = ['Chigorodó', 'Belén de Bajirá'];
+const KEYWORDS_GRUPO = {
+  'Fertilizantes y abonos': ['fertili', 'abono', 'urea', 'dap', 'kcl'],
+  'Semillas': ['semilla'],
+  'Agroquímicos / fumigación': ['fungicida', 'herbicida', 'insecticida', 'agroquímic', 'fumiga', 'glifosato', 'mancozeb'],
+  'Herramientas y equipos': ['herramient', 'equipo', 'machete', 'bomba', 'guadaña'],
+  'EPP': ['guante', 'casco', 'protec', 'careta', 'bota'],
+  'Medicamentos veterinarios': ['veterinari', 'medicamento', 'vacuna', 'antiparasit'],
+  'Otros / general': [],
+};
+
+let miId = null;
+let miPerfil = null;
+let esSuperAdmin = false;
+let puedeGenerar = false; // módulo 2 completo o super admin
+let puedeVer = false;
+let vistaActual = 'sorteo';
+let inventarioTodo = [];
+let sorteosActuales = [];
+let descuadresHistorial = [];
+let filtroTipo = 'todos';
+let sesionConteo = {}; // { sorteoId: [{producto, stock_sap, conteo_fisico}] }
+
+function fmtFecha(iso) {
+  if (!iso) return '—';
+  return new Date(iso).toLocaleDateString('es-CO', { day: '2-digit', month: 'short', year: 'numeric' });
+}
+function lunesDeEstaSemana() {
+  const hoy = new Date();
+  const dia = hoy.getDay();
+  const diff = dia === 0 ? -6 : 1 - dia;
+  const lunes = new Date(hoy);
+  lunes.setDate(hoy.getDate() + diff);
+  return lunes.toISOString().slice(0, 10);
+}
+function estadoTexto(e) {
+  return { pendiente: 'Pendiente', en_proceso: 'En proceso', completado: 'Completado' }[e] || e;
+}
+
+function renderNav() {
+  document.getElementById('nav').innerHTML = `
+    <button class="btn-nav ${vistaActual === 'sorteo' ? 'act' : ''}" onclick="irA('sorteo')">🎲 Sorteo de la semana</button>
+    <button class="btn-nav ${vistaActual === 'descuadres' ? 'act' : ''}" onclick="irA('descuadres')">📊 Descuadres</button>
+  `;
+}
+function irA(vista) {
+  vistaActual = vista;
+  renderNav();
+  if (vista === 'sorteo') renderSorteo();
+  else renderDescuadres();
+}
+
+// ---------------------------------------------------------
+// GENERACIÓN AUTOMÁTICA DEL SORTEO SEMANAL
+// ---------------------------------------------------------
+async function generarSorteosSiFaltan() {
+  if (!puedeGenerar) return;
+  const semana = lunesDeEstaSemana();
+  const { data: grupos } = await sb.from('inventario_grupos').select('*');
+  if (!grupos || !grupos.length) return;
+
+  for (const sede of SEDES) {
+    const { data: existente } = await sb.from('sorteos_preconteo').select('id').eq('sede', sede).eq('semana', semana).maybeSingle();
+    if (existente) continue;
+
+    const { data: recientes } = await sb.from('sorteos_preconteo').select('grupo_id').eq('sede', sede).order('semana', { ascending: false }).limit(3);
+    const excluidos = (recientes || []).map(r => r.grupo_id);
+    let pool = grupos.filter(g => !excluidos.includes(g.id));
+    if (!pool.length) pool = grupos;
+    const grupoElegido = pool[Math.floor(Math.random() * pool.length)];
+
+    const { data: responsableId } = await sb.rpc('perfil_responsable_area', { p_sede: sede, p_area: grupoElegido.responsable_area });
+
+    await sb.from('sorteos_preconteo').insert({
+      grupo_id: grupoElegido.id,
+      sede,
+      semana,
+      responsable_perfil_id: responsableId || null,
+      estado: 'pendiente',
+    });
+  }
+}
+
+// ---------------------------------------------------------
+// TAB: SORTEO DE LA SEMANA
+// ---------------------------------------------------------
+async function renderSorteo() {
+  document.getElementById('wrap').innerHTML = '<div class="loading">Cargando sorteo de la semana...</div>';
+
+  await generarSorteosSiFaltan();
+
+  const semana = lunesDeEstaSemana();
+  const [{ data: sorteos }, { data: grupos }] = await Promise.all([
+    sb.from('sorteos_preconteo').select('*').eq('semana', semana).order('sede'),
+    sb.from('inventario_grupos').select('*'),
+  ]);
+  sorteosActuales = sorteos || [];
+  const gruposPorId = {};
+  (grupos || []).forEach(g => { gruposPorId[g.id] = g; });
+
+  if (!sorteosActuales.length) {
+    document.getElementById('wrap').innerHTML = `
+      <div class="aviso">Todavía no hay un sorteo asignado para ti esta semana, o no tienes permiso para generarlo (eso lo dispara automáticamente alguien con Módulo 2 completo — Carlos, Diego o Alejandra — la primera vez que entra en la semana).</div>
+    `;
+    return;
+  }
+
+  const tarjetasHtml = sorteosActuales.map(s => {
+    const grupo = gruposPorId[s.grupo_id] || { nombre: '(grupo desconocido)', responsable_area: '—' };
+    const esMio = s.responsable_perfil_id === miId;
+    return `
+      <div class="card ${esMio ? 'mio' : ''}">
+        <div class="sorteo-top">
+          <div>
+            <div class="sorteo-grupo">${grupo.nombre}</div>
+            <div class="sorteo-meta">${s.sede} · Responsable: ${grupo.responsable_area} de esta sede ${esMio ? '— <b>te toca a ti esta semana</b>' : ''}</div>
+          </div>
+          <span class="badge b-${s.estado}">${estadoTexto(s.estado)}</span>
+        </div>
+        ${esMio || puedeGenerar ? `
+          <div style="margin-top:12px">
+            ${s.estado !== 'completado' ? `<button class="btn-mini" onclick="abrirConteo('${s.id}')">📝 Registrar conteo</button>` : ''}
+            ${(esMio || puedeGenerar) && s.estado !== 'completado' ? `<button class="btn-mini sec" onclick="marcarCompletado('${s.id}')">✅ Marcar como completado</button>` : ''}
+          </div>
+          <div id="conteo-${s.id}"></div>
+        ` : ''}
+      </div>
+    `;
+  }).join('');
+
+  document.getElementById('wrap').innerHTML = `
+    <div class="aviso">Cada semana el sistema sortea un grupo de productos por sede para hacer un conteo físico y compararlo contra lo que dice SAP. Los grupos de ejemplo se renombrarán cuando cargues el listado real de inventario.</div>
+    ${tarjetasHtml}
+  `;
+}
+
+async function abrirConteo(sorteoId) {
+  if (!inventarioTodo.length) {
+    const { data } = await sb.from('inventario').select('id,producto,categoria,cantidad,unidad').order('producto');
+    inventarioTodo = data || [];
+  }
+  if (!sesionConteo[sorteoId]) sesionConteo[sorteoId] = [];
+
+  const sorteo = sorteosActuales.find(s => s.id === sorteoId);
+  const { data: grupos } = await sb.from('inventario_grupos').select('*').eq('id', sorteo.grupo_id).maybeSingle();
+  const keywords = KEYWORDS_GRUPO[grupos?.nombre] || [];
+  const sugeridos = keywords.length
+    ? inventarioTodo.filter(p => keywords.some(k => (p.producto || '').toLowerCase().includes(k) || (p.categoria || '').toLowerCase().includes(k)))
+    : [];
+
+  const chipsHtml = sugeridos.slice(0, 15).map(p =>
+    `<span class="chip-sug" onclick="agregarProductoConteo('${sorteoId}','${p.id}')">${p.producto}</span>`
+  ).join('') || '<span style="font-size:11.5px;color:#999">Sin sugerencias automáticas para este grupo todavía — usa el buscador.</span>';
+
+  const filasHtml = sesionConteo[sorteoId].map((f, i) => `
+    <div class="fila-conteo">
+      <div class="fc-prod">${f.producto}</div>
+      <span style="font-size:11.5px;color:#888">SAP: ${f.stock_sap ?? '—'}</span>
+      <input class="fc-num" type="number" placeholder="Conteo físico" value="${f.conteo_fisico ?? ''}" onchange="actualizarConteo('${sorteoId}',${i},this.value)">
+      <button class="btn-mini" onclick="guardarUnConteo('${sorteoId}',${i})">💾 Guardar</button>
+    </div>
+  `).join('') || '<div class="vacio">Agrega productos con el buscador o los sugeridos de arriba.</div>';
+
+  document.getElementById(`conteo-${sorteoId}`).innerHTML = `
+    <div class="card" style="margin-top:10px;background:var(--vlt)">
+      <div class="card-t">Sugeridos para "${grupos?.nombre || ''}"</div>
+      <div class="sugeridos">${chipsHtml}</div>
+      <div class="field">
+        <label>Buscar cualquier otro producto</label>
+        <input type="text" id="buscar-prod-${sorteoId}" placeholder="Escribe el nombre..." oninput="buscarProductoConteo('${sorteoId}', this.value)">
+        <div id="resultados-prod-${sorteoId}"></div>
+      </div>
+      <div id="filas-conteo-${sorteoId}">${filasHtml}</div>
+    </div>
+  `;
+}
+
+function buscarProductoConteo(sorteoId, texto) {
+  const cont = document.getElementById(`resultados-prod-${sorteoId}`);
+  if (!texto || texto.length < 2) { cont.innerHTML = ''; return; }
+  const coincidencias = inventarioTodo.filter(p => (p.producto || '').toLowerCase().includes(texto.toLowerCase())).slice(0, 8);
+  cont.innerHTML = coincidencias.map(p =>
+    `<span class="chip-sug" onclick="agregarProductoConteo('${sorteoId}','${p.id}')">${p.producto}</span>`
+  ).join('') || '<span style="font-size:11.5px;color:#999">Sin resultados.</span>';
+}
+
+function agregarProductoConteo(sorteoId, productoId) {
+  const p = inventarioTodo.find(x => String(x.id) === String(productoId));
+  if (!p) return;
+  if (sesionConteo[sorteoId].some(f => f.producto === p.producto)) return;
+  sesionConteo[sorteoId].push({ producto: p.producto, stock_sap: p.cantidad, conteo_fisico: null });
+  abrirConteo(sorteoId);
+}
+
+function actualizarConteo(sorteoId, index, valor) {
+  sesionConteo[sorteoId][index].conteo_fisico = valor === '' ? null : parseFloat(valor);
+}
+
+async function guardarUnConteo(sorteoId, index) {
+  const fila = sesionConteo[sorteoId][index];
+  if (fila.conteo_fisico === null) { alert('Escribe el conteo físico antes de guardar.'); return; }
+  const sorteo = sorteosActuales.find(s => s.id === sorteoId);
+  const { error } = await sb.from('descuadres_inventario').insert({
+    sorteo_id: sorteoId,
+    producto: fila.producto,
+    sede: sorteo.sede,
+    stock_sap: fila.stock_sap,
+    conteo_fisico: fila.conteo_fisico,
+    tipo: 'rutinario',
+    reportado_por: miId,
+  });
+  if (error) { alert('No se pudo guardar: ' + error.message); return; }
+  await sb.from('sorteos_preconteo').update({ estado: 'en_proceso' }).eq('id', sorteoId).eq('estado', 'pendiente');
+  sesionConteo[sorteoId].splice(index, 1);
+  abrirConteo(sorteoId);
+}
+
+async function marcarCompletado(sorteoId) {
+  const { error } = await sb.from('sorteos_preconteo').update({ estado: 'completado' }).eq('id', sorteoId);
+  if (error) { alert('No se pudo actualizar: ' + error.message); return; }
+  renderSorteo();
+}
+
+// ---------------------------------------------------------
+// TAB: DESCUADRES (historial + reporte sorpresa)
+// ---------------------------------------------------------
+async function renderDescuadres() {
+  document.getElementById('wrap').innerHTML = '<div class="loading">Cargando descuadres...</div>';
+
+  let q = sb.from('descuadres_inventario').select('*').order('created_at', { ascending: false });
+  if (filtroTipo !== 'todos') q = q.eq('tipo', filtroTipo);
+  const { data, error } = await q;
+  descuadresHistorial = data || [];
+
+  const listaHtml = descuadresHistorial.length
+    ? descuadresHistorial.map(d => `
+        <div class="desc-item">
+          <div class="desc-top">
+            <div class="desc-prod">${d.producto}</div>
+            <span class="badge b-${d.tipo}">${d.tipo === 'sorpresa' ? 'Sorpresa' : 'Rutinario'}</span>
+          </div>
+          <div class="desc-meta">${d.sede} · SAP: ${d.stock_sap ?? '—'} · Físico: ${d.conteo_fisico ?? '—'} · Diferencia: <b class="${(d.diferencia || 0) < 0 ? 'fc-dif neg' : 'fc-dif pos'}">${d.diferencia ?? '—'}</b> · ${fmtFecha(d.fecha)}</div>
+        </div>
+      `).join('')
+    : '<div class="vacio">No hay descuadres registrados todavía.</div>';
+
+  document.getElementById('wrap').innerHTML = `
+    <div class="card">
+      <div class="card-t">➕ Reportar un descuadre sorpresa</div>
+      <div class="card-sub">Fuera del sorteo semanal — por ejemplo, si notas una diferencia mientras atiendes o revisas la bodega.</div>
+      <div class="field"><label>Producto</label><input type="text" id="sorp-producto" placeholder="Nombre del producto"></div>
+      <div class="field"><label>Sede</label><select id="sorp-sede">${SEDES.map(s => `<option value="${s}" ${miPerfil.sede === s ? 'selected' : ''}>${s}</option>`).join('')}</select></div>
+      <div class="field"><label>Stock según SAP (si lo sabes)</label><input type="number" id="sorp-sap" placeholder="Opcional"></div>
+      <div class="field"><label>Conteo físico</label><input type="number" id="sorp-fisico" placeholder="Lo que contaste"></div>
+      <button class="btn-save" id="btn-sorpresa">Reportar descuadre</button>
+      <div class="msg" id="msg-sorpresa" style="display:none"></div>
+    </div>
+    <div class="card">
+      <div class="card-t">Historial de descuadres</div>
+      <div class="filtro-row">
+        <button class="${filtroTipo === 'todos' ? 'act' : ''}" onclick="filtroTipo='todos'; renderDescuadres()">Todos</button>
+        <button class="${filtroTipo === 'rutinario' ? 'act' : ''}" onclick="filtroTipo='rutinario'; renderDescuadres()">Rutinarios</button>
+        <button class="${filtroTipo === 'sorpresa' ? 'act' : ''}" onclick="filtroTipo='sorpresa'; renderDescuadres()">Sorpresa</button>
+      </div>
+      ${listaHtml}
+    </div>
+  `;
+
+  document.getElementById('btn-sorpresa').addEventListener('click', async () => {
+    const producto = document.getElementById('sorp-producto').value.trim();
+    const sede = document.getElementById('sorp-sede').value;
+    const stockSap = document.getElementById('sorp-sap').value;
+    const conteoFisico = document.getElementById('sorp-fisico').value;
+    const msg = document.getElementById('msg-sorpresa');
+    msg.style.display = 'none';
+
+    if (!producto || conteoFisico === '') {
+      msg.textContent = 'El producto y el conteo físico son obligatorios.';
+      msg.className = 'msg err'; msg.style.display = 'block';
+      return;
+    }
+
+    const btn = document.getElementById('btn-sorpresa');
+    btn.disabled = true; btn.textContent = 'Enviando...';
+
+    const { error } = await sb.from('descuadres_inventario').insert({
+      producto, sede,
+      stock_sap: stockSap === '' ? null : parseFloat(stockSap),
+      conteo_fisico: parseFloat(conteoFisico),
+      tipo: 'sorpresa',
+      reportado_por: miId,
+    });
+
+    btn.disabled = false; btn.textContent = 'Reportar descuadre';
+
+    if (error) {
+      msg.textContent = 'No se pudo enviar: ' + error.message;
+      msg.className = 'msg err'; msg.style.display = 'block';
+      return;
+    }
+    msg.textContent = '✅ Descuadre reportado.';
+    msg.className = 'msg ok'; msg.style.display = 'block';
+    setTimeout(() => renderDescuadres(), 800);
+  });
+}
+
+(async () => {
+  const { data: { session } } = await sb.auth.getSession();
+  if (!session) { window.location.href = 'login.html'; return; }
+  miId = session.user.id;
+
+  const [{ data: perfil }, { data: permisos }] = await Promise.all([
+    sb.from('perfiles').select('*').eq('id', miId).single(),
+    sb.from('permisos_modulo').select('*').eq('perfil_id', miId),
+  ]);
+  if (!perfil) {
+    document.getElementById('wrap').innerHTML = '<div class="loading">Tu usuario no tiene un perfil configurado todavía.</div>';
+    return;
+  }
+  miPerfil = perfil;
+  esSuperAdmin = perfil.es_super_admin;
+  const nivel1 = (permisos || []).find(p => p.modulo === 1)?.nivel || 'inactivo';
+  const nivel2 = (permisos || []).find(p => p.modulo === 2)?.nivel || 'inactivo';
+  puedeGenerar = esSuperAdmin || nivel2 === 'completo';
+  puedeVer = esSuperAdmin || nivel1 !== 'inactivo' || nivel2 !== 'inactivo';
+
+  if (!puedeVer) {
+    document.getElementById('wrap').innerHTML = '<div class="loading">No tienes permiso para ver este módulo.</div>';
+    return;
+  }
+
+  renderNav();
+  renderSorteo();
+})();
+</script>
+
+</body>
+</html>

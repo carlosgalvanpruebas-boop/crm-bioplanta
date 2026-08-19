@@ -53,6 +53,7 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:#f0f4f0;color:var(--
   </div>
   <div class="hdr-r">
     <div class="who" id="who">Cargando...</div>
+    <a class="btn-out" id="btn-panel-accesos" href="panel-accesos.html" style="display:none;text-decoration:none">🔐 Panel de Accesos</a>
     <button class="btn-out" onclick="salir()">Salir</button>
   </div>
 </div>
@@ -161,6 +162,9 @@ async function salir() {
   }
 
   document.getElementById('who').innerHTML = `<b>${perfil.nombre}</b><br>${perfil.cargo} · ${perfil.sede}`;
+  if (perfil.es_super_admin) {
+    document.getElementById('btn-panel-accesos').style.display = 'inline-block';
+  }
 
   const nivel1 = (permisos || []).find(p => p.modulo === 1)?.nivel || 'inactivo';
   const nivel2 = (permisos || []).find(p => p.modulo === 2)?.nivel || 'inactivo';

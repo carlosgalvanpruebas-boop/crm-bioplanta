@@ -1,0 +1,336 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Agrotienda Bioplanta · Fertilización de Palma</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+:root{--v1:#33513a;--v2:#4f7c5a;--v3:#84a38c;--v4:#a9c2af;--vbg:#eaefeb;--vlt:#f4f8f5;--gris:#f0f4f0;--texto:#1a2e1a;--beige:#e6ceab;--beige-lt:#f4e9d9;--vino:#984745;--vino-lt:#f3e9e9}
+body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--gris);color:var(--texto);min-height:100vh;font-size:14px}
+
+.header{background:linear-gradient(135deg,var(--v1),var(--v2));color:#fff;padding:16px 20px;position:sticky;top:0;z-index:20;box-shadow:0 2px 12px rgba(0,0,0,.25)}
+.hdr-top{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap}
+.logo-wrap{display:flex;align-items:center;gap:10px}
+.logo-ico{font-size:26px}
+.brand{font-size:15px;font-weight:700}
+.brand-sub{font-size:11px;opacity:.75;margin-top:1px}
+.hdr-btns{display:flex;gap:8px;flex-wrap:wrap}
+.btn-h{background:rgba(255,255,255,.15);border:1px solid rgba(255,255,255,.3);color:#fff;padding:7px 16px;border-radius:20px;font-size:12px;cursor:pointer;font-family:inherit;text-decoration:none;display:inline-block}
+.btn-h:hover{background:rgba(255,255,255,.28)}
+.colab-bar{margin-top:12px;font-size:12px;opacity:.85}
+.session-badge{background:var(--v4);color:var(--v1);padding:4px 12px;border-radius:16px;font-weight:700;margin-left:6px}
+
+.wrap{max-width:820px;margin:0 auto;padding:22px 16px 60px}
+
+.search-box{background:#fff;border-radius:14px;padding:18px;box-shadow:0 2px 10px rgba(0,0,0,.07)}
+.search-box input{width:100%;border:1.5px solid #b7e4c7;border-radius:10px;padding:12px 14px;font-size:15px;font-family:inherit;outline:none}
+.res-list{margin-top:10px;display:flex;flex-direction:column;gap:6px;max-height:340px;overflow-y:auto}
+.res-item{background:var(--vlt);border-radius:8px;padding:10px 12px;cursor:pointer;font-size:13px}
+.res-item:hover{background:var(--vbg)}
+.res-item b{color:var(--v1)}
+.res-item span{color:#5a6e5e;font-size:11.5px;display:block;margin-top:2px}
+
+.ficha{background:#fff;border-radius:14px;padding:20px;box-shadow:0 2px 10px rgba(0,0,0,.07);margin-top:16px}
+.ficha-top{display:flex;justify-content:space-between;align-items:flex-start;gap:10px;flex-wrap:wrap}
+.ficha-top h2{color:var(--v1);font-size:17px}
+.ficha-top .sub{font-size:12px;color:#888;margin-top:2px}
+.btn-back{background:none;border:none;color:var(--v2);font-size:12px;cursor:pointer;font-family:inherit;margin-bottom:10px}
+
+.toca-box{background:var(--vbg);border-radius:10px;padding:14px 16px;margin-top:14px}
+.toca-box .lbl{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--v2)}
+.toca-item{display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid rgba(0,0,0,.06);flex-wrap:wrap;gap:6px}
+.toca-item:last-child{border-bottom:none}
+.toca-prod{font-weight:700;color:var(--v1);font-size:13.5px}
+.toca-cant{font-size:12px;color:#5a6e5e}
+.btn-marcar{background:var(--v2);color:#fff;border:none;padding:6px 12px;border-radius:16px;font-size:11.5px;cursor:pointer;font-family:inherit}
+.chip-hecho{background:var(--v4);color:var(--v1);font-size:11px;font-weight:700;padding:4px 10px;border-radius:12px}
+
+.sec-tag{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--v3);margin:18px 0 8px;padding-bottom:4px;border-bottom:2px solid var(--vbg)}
+.plan-tbl{width:100%;border-collapse:collapse;font-size:12.5px}
+.plan-tbl th,.plan-tbl td{padding:7px 8px;text-align:left;border-bottom:1px solid var(--vbg)}
+.plan-tbl th{color:var(--v1);font-weight:700;background:var(--vlt)}
+.hist-row{display:flex;justify-content:space-between;font-size:12.5px;padding:7px 0;border-bottom:1px solid var(--vbg)}
+.hist-row .f{color:#888;font-size:11px}
+
+.empty{text-align:center;padding:30px;color:#888;font-size:13px}
+
+.modal-bg{display:none;position:fixed;inset:0;background:rgba(20,30,20,.55);z-index:50;align-items:center;justify-content:center;padding:14px}
+.modal-bg.show{display:flex}
+.modal{background:#fff;border-radius:16px;max-width:420px;width:100%;padding:22px}
+.modal h3{color:var(--v1);font-size:15px;margin-bottom:14px}
+.field{display:flex;flex-direction:column;gap:5px;margin-bottom:12px}
+.field label{font-size:12px;font-weight:600;color:var(--v2)}
+.field input,.field textarea{border:1.5px solid #b7e4c7;border-radius:8px;padding:9px 11px;font-size:14px;font-family:inherit;outline:none;width:100%}
+.modal-btns{display:flex;gap:8px;margin-top:6px}
+.btn-save{flex:1;padding:11px;background:linear-gradient(135deg,var(--v1),var(--v2));color:#fff;border:none;border-radius:9px;font-size:13.5px;font-weight:700;cursor:pointer;font-family:inherit}
+.btn-cancel{padding:11px 16px;background:var(--vlt);color:var(--v1);border:none;border-radius:9px;font-size:13.5px;cursor:pointer;font-family:inherit}
+.msg{margin-top:12px;padding:9px 12px;border-radius:8px;font-size:13px;text-align:center;display:none}
+.msg.ok{background:var(--vbg);color:var(--v1);display:block}
+.msg.err{background:#fde8e8;color:#a00;display:block}
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div class="hdr-top">
+    <div class="logo-wrap">
+      <div class="logo-ico">🌴</div>
+      <div>
+        <div class="brand">Fertilización de Palma</div>
+        <div class="brand-sub">Seguimiento mensual por productor</div>
+      </div>
+    </div>
+    <div class="hdr-btns">
+      <a class="btn-h" href="hub.html">← Hub</a>
+    </div>
+  </div>
+  <div class="colab-bar" id="colab-bar"></div>
+</div>
+
+<div class="wrap" id="app"><div class="empty">⏳ Cargando...</div></div>
+
+<div class="modal-bg" id="modal-bg">
+  <div class="modal">
+    <h3>Marcar fertilización</h3>
+    <div class="field"><label>Producto</label><input type="text" id="m-producto"></div>
+    <div class="field"><label>Cantidad (bultos)</label><input type="number" step="0.01" id="m-cantidad"></div>
+    <div class="field"><label>Fecha</label><input type="date" id="m-fecha"></div>
+    <div class="field"><label>Observación (opcional)</label><textarea id="m-obs" rows="2"></textarea></div>
+    <div class="modal-btns">
+      <button class="btn-cancel" id="m-cancelar">Cancelar</button>
+      <button class="btn-save" id="m-guardar">Guardar</button>
+    </div>
+    <div class="msg" id="m-msg"></div>
+  </div>
+</div>
+
+<script>
+const SUPABASE_URL = 'https://fpqogvxssnoarzgxcitc.supabase.co';
+const SUPABASE_KEY = 'sb_publishable_ccZF-8tenblFEah5lXfd3w_mYTHMtMC';
+const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+const MESES = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
+
+let userId = null;
+let miNombre = '';
+let productores = [];
+let productorActual = null;
+let planActual = [];
+let registrosActual = [];
+
+function fmtBultos(n) {
+  if (n === null || n === undefined) return '—';
+  return Number(n).toFixed(2).replace(/\.00$/, '') + ' bultos';
+}
+
+function renderColabBar() {
+  document.getElementById('colab-bar').innerHTML =
+    `Sesión: <span class="session-badge">${miNombre}</span>`;
+}
+
+function mesActualNombre() {
+  return MESES[new Date().getMonth()];
+}
+
+function renderBuscador() {
+  document.getElementById('app').innerHTML = `
+    <div class="search-box">
+      <input type="text" id="buscar" placeholder="Buscar por predio, productor o cédula...">
+      <div class="res-list" id="res-list"></div>
+    </div>
+  `;
+  const input = document.getElementById('buscar');
+  input.addEventListener('input', () => {
+    const q = input.value.trim().toLowerCase();
+    const list = document.getElementById('res-list');
+    if (q.length < 2) { list.innerHTML = ''; return; }
+    const encontrados = productores.filter(p =>
+      (p.predio || '').toLowerCase().includes(q) ||
+      (p.productor_nombre || '').toLowerCase().includes(q) ||
+      (p.productor_cedula || '').includes(q)
+    ).slice(0, 25);
+    list.innerHTML = encontrados.length === 0
+      ? '<div class="empty">Sin resultados</div>'
+      : encontrados.map(p => `
+        <div class="res-item" data-id="${p.id}">
+          <b>${p.predio}</b> — ${p.productor_nombre}
+          <span>${p.municipio || '—'} · ${p.hectareas_total ? p.hectareas_total + ' ha' : ''}</span>
+        </div>`).join('');
+    list.querySelectorAll('.res-item').forEach(el => {
+      el.addEventListener('click', () => abrirProductor(el.dataset.id));
+    });
+  });
+  input.focus();
+}
+
+async function abrirProductor(id) {
+  productorActual = productores.find(p => p.id === id);
+  if (!productorActual) return;
+
+  document.getElementById('app').innerHTML = '<div class="empty">⏳ Cargando plan y registros...</div>';
+
+  const [{ data: plan }, { data: registros }] = await Promise.all([
+    sb.from('plan_fertilizacion_palma').select('*').eq('productor_id', id).order('orden_mes'),
+    sb.from('registro_fertilizacion_palma').select('*, perfiles(nombre)').eq('productor_id', id).order('fecha', { ascending: false }),
+  ]);
+
+  planActual = plan || [];
+  registrosActual = registros || [];
+  renderFicha();
+}
+
+function yaRegistradoEsteMes(producto) {
+  const ahora = new Date();
+  return registrosActual.some(r => {
+    const f = new Date(r.fecha + 'T00:00:00');
+    return r.producto === producto && f.getMonth() === ahora.getMonth() && f.getFullYear() === ahora.getFullYear();
+  });
+}
+
+function renderFicha() {
+  const p = productorActual;
+  const mesHoy = mesActualNombre();
+  const planMesActual = planActual.filter(f => f.mes === mesHoy);
+
+  const tocaHtml = planMesActual.length === 0
+    ? '<div class="empty">Este productor no tiene un producto asignado para este mes en su plan.</div>'
+    : planMesActual.map(f => `
+        <div class="toca-item">
+          <div>
+            <div class="toca-prod">${f.producto}</div>
+            <div class="toca-cant">${fmtBultos(f.cantidad_bultos)}${f.dosis_gramos_palma ? ' · ' + f.dosis_gramos_palma + ' g/palma' : ''}</div>
+          </div>
+          ${yaRegistradoEsteMes(f.producto)
+            ? '<span class="chip-hecho">✓ Ya registrado</span>'
+            : `<button class="btn-marcar" data-producto="${f.producto}" data-cantidad="${f.cantidad_bultos || ''}">Marcar comprado</button>`}
+        </div>
+      `).join('');
+
+  const planTablaHtml = planActual.length === 0
+    ? '<div class="empty">Este productor todavía no tiene un plan de fertilización cargado.</div>'
+    : `<table class="plan-tbl">
+        <thead><tr><th>Mes</th><th>Producto</th><th>Cantidad</th></tr></thead>
+        <tbody>${planActual.map(f => `
+          <tr${f.mes === mesHoy ? ' style="background:var(--vbg)"' : ''}>
+            <td>${f.mes}</td><td>${f.producto}</td><td>${fmtBultos(f.cantidad_bultos)}</td>
+          </tr>`).join('')}</tbody>
+      </table>`;
+
+  const historialHtml = registrosActual.length === 0
+    ? '<div class="empty">Sin registros de fertilización todavía.</div>'
+    : registrosActual.map(r => {
+        const fechaS = new Date(r.fecha + 'T00:00:00').toLocaleDateString('es-CO', { day:'2-digit', month:'short', year:'numeric' });
+        return `<div class="hist-row">
+          <span>${r.producto} — ${fmtBultos(r.cantidad_bultos)}</span>
+          <span class="f">${fechaS} · ${r.perfiles ? r.perfiles.nombre : '—'}</span>
+        </div>`;
+      }).join('');
+
+  document.getElementById('app').innerHTML = `
+    <button class="btn-back" id="btn-volver">← Buscar otro productor</button>
+    <div class="ficha">
+      <div class="ficha-top">
+        <div>
+          <h2>${p.predio}</h2>
+          <div class="sub">${p.productor_nombre}${p.productor_cedula ? ' · C.C. ' + p.productor_cedula : ''} · ${p.municipio || '—'}</div>
+        </div>
+      </div>
+
+      <div class="toca-box">
+        <div class="lbl">Le toca en ${mesHoy}</div>
+        ${tocaHtml}
+      </div>
+
+      <div class="sec-tag">Plan completo</div>
+      ${planTablaHtml}
+
+      <div class="sec-tag">Historial de fertilización</div>
+      ${historialHtml}
+    </div>
+  `;
+
+  document.getElementById('btn-volver').addEventListener('click', renderBuscador);
+  document.querySelectorAll('.btn-marcar').forEach(btn => {
+    btn.addEventListener('click', () => abrirModalMarcar(btn.dataset.producto, btn.dataset.cantidad));
+  });
+}
+
+function abrirModalMarcar(producto, cantidad) {
+  document.getElementById('m-producto').value = producto || '';
+  document.getElementById('m-cantidad').value = cantidad || '';
+  document.getElementById('m-fecha').value = new Date().toISOString().slice(0, 10);
+  document.getElementById('m-obs').value = '';
+  document.getElementById('m-msg').className = 'msg';
+  document.getElementById('m-msg').textContent = '';
+  document.getElementById('modal-bg').classList.add('show');
+}
+
+document.getElementById('m-cancelar').addEventListener('click', () => {
+  document.getElementById('modal-bg').classList.remove('show');
+});
+
+document.getElementById('m-guardar').addEventListener('click', async () => {
+  const producto = document.getElementById('m-producto').value.trim();
+  const cantidad = document.getElementById('m-cantidad').value;
+  const fecha = document.getElementById('m-fecha').value;
+  const obs = document.getElementById('m-obs').value.trim();
+  const msgEl = document.getElementById('m-msg');
+
+  if (!producto || !fecha) {
+    msgEl.className = 'msg err'; msgEl.textContent = '⚠️ Falta el producto o la fecha'; return;
+  }
+
+  const btn = document.getElementById('m-guardar');
+  btn.disabled = true; btn.textContent = 'Guardando...';
+
+  try {
+    const { error } = await sb.from('registro_fertilizacion_palma').insert({
+      productor_id: productorActual.id,
+      fecha,
+      producto,
+      cantidad_bultos: cantidad ? Number(cantidad) : null,
+      observacion: obs || null,
+      registrado_por: userId,
+    });
+    if (error) throw error;
+
+    msgEl.className = 'msg ok'; msgEl.textContent = '✅ Registrado correctamente';
+    setTimeout(async () => {
+      document.getElementById('modal-bg').classList.remove('show');
+      await abrirProductor(productorActual.id);
+    }, 900);
+  } catch (e) {
+    msgEl.className = 'msg err'; msgEl.textContent = '❌ ' + (e.message || 'Error al guardar');
+  } finally {
+    btn.disabled = false; btn.textContent = 'Guardar';
+  }
+});
+
+// ── INIT ──────────────────────────────────────────────────────────────────────
+(async () => {
+  const { data: { session } } = await sb.auth.getSession();
+  if (!session) { window.location.href = 'login.html'; return; }
+  userId = session.user.id;
+
+  const { data: perfil } = await sb.from('perfiles').select('*').eq('id', userId).single();
+  if (!perfil) {
+    document.getElementById('app').innerHTML = '<div class="empty">Tu usuario no tiene un perfil configurado todavía. Pídele a Carlos que te lo cree en el Panel de Accesos.</div>';
+    return;
+  }
+  miNombre = perfil.nombre;
+  renderColabBar();
+
+  const { data, error } = await sb.from('productores_palma').select('*').order('predio');
+  if (error) {
+    document.getElementById('app').innerHTML = `<div class="empty">No se pudo cargar la base de productores de palma. Es posible que tu usuario no tenga permiso asignado.<br><br>${error.message}</div>`;
+    return;
+  }
+  productores = data || [];
+  renderBuscador();
+})();
+</script>
+
+</body>
+</html>

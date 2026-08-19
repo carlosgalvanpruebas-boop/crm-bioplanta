@@ -35,6 +35,9 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:#f0f4f0;color:var(--
 .b-completado{background:var(--v1);color:#fff}
 .b-rutinario{background:var(--vbg);color:var(--v1)}
 .b-sorpresa{background:#fde3e2;color:var(--vino)}
+.b-abierto{background:#fde3e2;color:var(--vino)}
+.b-resuelto{background:#e6f4ea;color:#256d3b}
+.b-sin_diferencia{background:#eee;color:#999}
 
 .sorteo-top{display:flex;justify-content:space-between;align-items:flex-start;gap:10px;flex-wrap:wrap}
 .sorteo-grupo{font-size:15px;font-weight:800;color:var(--v1)}
@@ -115,6 +118,8 @@ let inventarioTodo = [];
 let sorteosActuales = [];
 let descuadresHistorial = [];
 let filtroTipo = 'todos';
+let filtroEstadoDesc = 'abierto';
+let puedeResolver = false;
 let sesionConteo = {}; // { sorteoId: [{producto, stock_sap, conteo_fisico}] }
 
 function fmtFecha(iso) {
@@ -209,11 +214,11 @@ async function renderSorteo() {
         <div class="sorteo-top">
           <div>
             <div class="sorteo-grupo">${grupo.nombre}</div>
-            <div class="sorteo-meta">${s.sede} · Le corresponde a: ${grupo.responsable_area} de esta sede ${esMio ? '— <b>te toca a ti esta semana</b>' : '(en consulta — el conteo lo hace esa persona, no tú)'}</div>
+            <div class="sorteo-meta">${s.sede} · Le corresponde a: ${grupo.responsable_area} de esta sede ${esMio ? '— <b>te toca a ti esta semana</b>' : (esSuperAdmin ? '(no te toca contar a ti — ves el botón solo porque eres Super Admin, para poder probar la pantalla)' : '(en consulta — el conteo lo hace esa persona, no tú)')}</div>
           </div>
           <span class="badge b-${s.estado}">${estadoTexto(s.estado)}</span>
         </div>
-        ${esMio ? `
+        ${esMio || esSuperAdmin ? `
           <div style="margin-top:12px">
             ${s.estado !== 'completado' ? `<button class="btn-mini" onclick="abrirConteo('${s.id}')">📝 Registrar conteo</button>` : ''}
             ${s.estado !== 'completado' ? `<button class="btn-mini sec" onclick="marcarCompletado('${s.id}')">✅ Marcar como completado</button>` : ''}
@@ -325,6 +330,7 @@ async function renderDescuadres() {
 
   let q = sb.from('descuadres_inventario').select('*').order('created_at', { ascending: false });
   if (filtroTipo !== 'todos') q = q.eq('tipo', filtroTipo);
+  if (filtroEstadoDesc !== 'todos') q = q.eq('estado', filtroEstadoDesc);
   const { data, error } = await q;
   descuadresHistorial = data || [];
 
@@ -333,12 +339,22 @@ async function renderDescuadres() {
         <div class="desc-item">
           <div class="desc-top">
             <div class="desc-prod">${d.producto}</div>
-            <span class="badge b-${d.tipo}">${d.tipo === 'sorpresa' ? 'Sorpresa' : 'Rutinario'}</span>
+            <div style="display:flex;gap:6px">
+              <span class="badge b-${d.tipo}">${d.tipo === 'sorpresa' ? 'Sorpresa' : 'Rutinario'}</span>
+              <span class="badge b-${d.estado || 'abierto'}">${{ abierto: 'Abierto', resuelto: 'Resuelto', sin_diferencia: 'Sin diferencia' }[d.estado] || 'Abierto'}</span>
+            </div>
           </div>
           <div class="desc-meta">${d.sede} · SAP: ${d.stock_sap ?? '—'} · Físico: ${d.conteo_fisico ?? '—'} · Diferencia: <b class="${(d.diferencia || 0) < 0 ? 'fc-dif neg' : 'fc-dif pos'}">${d.diferencia ?? '—'}</b> · ${fmtFecha(d.fecha)}</div>
+          ${d.estado === 'resuelto' ? `<div class="desc-meta" style="margin-top:4px">✅ Resuelto: ${d.resolucion || '(sin nota)'} — ${fmtFecha(d.fecha_resolucion)}</div>` : ''}
+          ${d.estado === 'abierto' && puedeResolver ? `
+            <div style="margin-top:8px;display:flex;gap:6px;flex-wrap:wrap">
+              <input type="text" id="res-nota-${d.id}" placeholder="¿Qué pasó? (ej: se encontraron mal ubicadas)" style="flex:1;min-width:220px;border:1.5px solid #d6e2d9;border-radius:7px;padding:6px 8px;font-size:11.5px;font-family:inherit">
+              <button class="btn-mini" onclick="resolverDescuadre('${d.id}')">✅ Marcar como resuelto</button>
+            </div>
+          ` : ''}
         </div>
       `).join('')
-    : '<div class="vacio">No hay descuadres registrados todavía.</div>';
+    : '<div class="vacio">No hay descuadres con este filtro.</div>';
 
   document.getElementById('wrap').innerHTML = `
     <div class="card">
@@ -353,8 +369,15 @@ async function renderDescuadres() {
     </div>
     <div class="card">
       <div class="card-t">Historial de descuadres</div>
+      <div class="card-sub">"Abierto" = hay diferencia y todavía nadie explicó qué pasó. "Resuelto" = ya se investigó (aparecieron las unidades, se corrigió un error de conteo, o se confirmó una pérdida real). "Sin diferencia" = se contó igual a SAP, no hace falta hacer nada.</div>
       <div class="filtro-row">
-        <button class="${filtroTipo === 'todos' ? 'act' : ''}" onclick="filtroTipo='todos'; renderDescuadres()">Todos</button>
+        <button class="${filtroEstadoDesc === 'abierto' ? 'act' : ''}" onclick="filtroEstadoDesc='abierto'; renderDescuadres()">Abiertos</button>
+        <button class="${filtroEstadoDesc === 'resuelto' ? 'act' : ''}" onclick="filtroEstadoDesc='resuelto'; renderDescuadres()">Resueltos</button>
+        <button class="${filtroEstadoDesc === 'sin_diferencia' ? 'act' : ''}" onclick="filtroEstadoDesc='sin_diferencia'; renderDescuadres()">Sin diferencia</button>
+        <button class="${filtroEstadoDesc === 'todos' ? 'act' : ''}" onclick="filtroEstadoDesc='todos'; renderDescuadres()">Todos</button>
+      </div>
+      <div class="filtro-row">
+        <button class="${filtroTipo === 'todos' ? 'act' : ''}" onclick="filtroTipo='todos'; renderDescuadres()">Todos los tipos</button>
         <button class="${filtroTipo === 'rutinario' ? 'act' : ''}" onclick="filtroTipo='rutinario'; renderDescuadres()">Rutinarios</button>
         <button class="${filtroTipo === 'sorpresa' ? 'act' : ''}" onclick="filtroTipo='sorpresa'; renderDescuadres()">Sorpresa</button>
       </div>
@@ -400,6 +423,20 @@ async function renderDescuadres() {
   });
 }
 
+async function resolverDescuadre(id) {
+  const notaEl = document.getElementById(`res-nota-${id}`);
+  const nota = notaEl ? notaEl.value.trim() : '';
+  if (!nota) { alert('Escribe una breve nota de qué pasó antes de marcarlo como resuelto.'); return; }
+  const { error } = await sb.from('descuadres_inventario').update({
+    estado: 'resuelto',
+    resolucion: nota,
+    resuelto_por: miId,
+    fecha_resolucion: new Date().toISOString(),
+  }).eq('id', id);
+  if (error) { alert('No se pudo actualizar: ' + error.message); return; }
+  renderDescuadres();
+}
+
 (async () => {
   const { data: { session } } = await sb.auth.getSession();
   if (!session) { window.location.href = 'login.html'; return; }
@@ -418,6 +455,7 @@ async function renderDescuadres() {
   const nivel1 = (permisos || []).find(p => p.modulo === 1)?.nivel || 'inactivo';
   const nivel2 = (permisos || []).find(p => p.modulo === 2)?.nivel || 'inactivo';
   puedeGenerar = esSuperAdmin || nivel2 === 'completo';
+  puedeResolver = puedeGenerar;
   puedeVer = esSuperAdmin || nivel1 !== 'inactivo' || nivel2 !== 'inactivo';
 
   if (!puedeVer) {

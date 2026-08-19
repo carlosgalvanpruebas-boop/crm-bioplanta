@@ -184,8 +184,11 @@ async function cargarBadges(userId, perfil, nivel2) {
   // le corresponde ver — su propio sorteo, o los de su sede si tiene
   // Módulo 2).
   try {
-    const { count } = await sb.from('sorteos_preconteo').select('id', { count: 'exact', head: true }).neq('estado', 'completado');
-    pintarBadge('2.8', count);
+    const [{ count: cSorteos }, { count: cAbiertos }] = await Promise.all([
+      sb.from('sorteos_preconteo').select('id', { count: 'exact', head: true }).neq('estado', 'completado'),
+      sb.from('descuadres_inventario').select('id', { count: 'exact', head: true }).eq('estado', 'abierto'),
+    ]);
+    pintarBadge('2.8', (cSorteos || 0) + (cAbiertos || 0));
   } catch (e) {}
 
   // 2.2 Sugerido de compras: reportes pendientes de autorizar

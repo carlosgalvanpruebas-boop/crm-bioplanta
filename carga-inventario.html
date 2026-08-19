@@ -1,0 +1,426 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Agrotienda Bioplanta · Carga de inventario</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+:root{--v1:#33513a;--v2:#4f7c5a;--v3:#84a38c;--v4:#a9c2af;--vbg:#eaefeb;--vlt:#f4f8f5;--texto:#1a2e1a;--beige:#e6ceab;--vino:#984745}
+body{font-family:'Segoe UI',system-ui,sans-serif;background:#f0f4f0;color:var(--texto);min-height:100vh}
+.header{background:linear-gradient(135deg,var(--v1),var(--v2));color:#fff;padding:16px 20px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;box-shadow:0 2px 12px rgba(0,0,0,.2)}
+.hdr-l{display:flex;align-items:center;gap:10px}
+.logo-ico{font-size:26px}
+.brand{font-size:15px;font-weight:800}
+.brand-sub{font-size:11px;opacity:.8}
+.btn-h{background:rgba(255,255,255,.15);border:1px solid rgba(255,255,255,.3);color:#fff;padding:7px 16px;border-radius:20px;font-size:12px;cursor:pointer;font-family:inherit;text-decoration:none}
+
+.wrap{max-width:900px;margin:0 auto;padding:18px 18px 60px}
+.loading{text-align:center;padding:80px;color:#888}
+
+.aviso{background:var(--beige);color:var(--v1);border-radius:10px;padding:12px 16px;font-size:12.5px;margin-bottom:16px;line-height:1.5}
+.card{background:#fff;border-radius:16px;padding:20px;box-shadow:0 2px 10px rgba(0,0,0,.07);margin-bottom:18px}
+.card h3{font-size:14px;color:var(--v1);margin-bottom:10px}
+
+.drop{border:2px dashed #b7d0bb;border-radius:12px;padding:30px;text-align:center;color:#777;font-size:13px}
+input[type=file]{margin-top:12px}
+.btn{background:var(--v2);color:#fff;border:none;border-radius:8px;padding:10px 18px;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit}
+.btn:disabled{opacity:.5;cursor:default}
+.btn-sec{background:var(--vbg);color:var(--v1)}
+
+table{width:100%;border-collapse:collapse;font-size:12px;margin-top:10px}
+th,td{text-align:left;padding:6px 8px;border-bottom:1px solid var(--vbg)}
+th{color:var(--v2);font-size:11px;text-transform:uppercase}
+
+.resumen{display:flex;gap:10px;flex-wrap:wrap;margin:14px 0}
+.chip-r{background:var(--vlt);color:var(--v2);padding:8px 14px;border-radius:10px;font-size:12.5px;font-weight:700}
+.chip-r.nuevo{background:#e6f4ea;color:#256d3b}
+.chip-r.elim{background:#fde3e2;color:var(--vino)}
+
+.msg{padding:10px 14px;border-radius:8px;font-size:13px;margin-top:10px}
+.msg.ok{background:#e6f4ea;color:#256d3b}
+.msg.err{background:#fde3e2;color:var(--vino)}
+
+.hist-row{display:flex;justify-content:space-between;gap:10px;padding:8px 0;border-bottom:1px solid var(--vbg);font-size:12px}
+.hist-row:last-child{border-bottom:none}
+.hist-estado{font-size:10px;font-weight:700;padding:2px 8px;border-radius:8px}
+.hist-ok{background:#e6f4ea;color:#256d3b}
+.hist-error{background:#fde3e2;color:var(--vino)}
+
+.grp-row{display:flex;align-items:center;gap:10px;padding:7px 0;border-bottom:1px solid var(--vbg);font-size:12.5px}
+.grp-row:last-child{border-bottom:none}
+.grp-cod{font-weight:800;color:var(--v1);min-width:90px}
+.grp-nom{flex:1;color:#555}
+.grp-cnt{color:#999;font-size:11px;min-width:70px;text-align:right}
+.tag-excl{font-size:10px;font-weight:700;padding:2px 8px;border-radius:8px;background:#fde3e2;color:var(--vino);margin-left:6px}
+.mini-form{display:flex;gap:8px;margin-top:12px;flex-wrap:wrap}
+.mini-form input{border:1.5px solid #d6e2d9;border-radius:8px;padding:7px 10px;font-size:12.5px;font-family:inherit}
+.btn-x{background:none;border:none;color:var(--vino);cursor:pointer;font-size:14px;padding:0 6px}
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div class="hdr-l">
+    <div class="logo-ico">📥</div>
+    <div>
+      <div class="brand">Carga de inventario</div>
+      <div class="brand-sub">Sube el Excel de SAP y el sistema actualiza el inventario</div>
+    </div>
+  </div>
+  <a class="btn-h" href="hub.html">← Hub</a>
+</div>
+
+<div class="wrap" id="wrap">
+  <div class="loading">Cargando...</div>
+</div>
+
+<script>
+const SUPABASE_URL = 'https://fpqogvxssnoarzgxcitc.supabase.co';
+const SUPABASE_KEY = 'sb_publishable_ccZF-8tenblFEah5lXfd3w_mYTHMtMC';
+const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+// Mismo criterio de categoría por prefijo de código SAP usado al cargar
+// el primer listado real (Fase 17) — se usa como respaldo mientras SAP
+// no entregue un campo real de "Grupo de artículos".
+const MAPA_PREFIJO = {
+  VET: 'Veterinaria', HRA: 'Herramientas y suministros agrícolas', HBD: 'Herbicidas',
+  AGRO: 'Agroquímicos varios (mixto)', RPA: 'Repuestos de fumigadoras/equipos',
+  ALM: 'Almacén general (mixto)', ITD: 'Insecticidas', FTF: 'Fertilizantes foliares',
+  FGD: 'Fungicidas', FER: 'Fertilizantes edáficos/granulados', MCT: 'Mascotas',
+  MYF: 'Fumigadoras y bombas', EPA: 'Elementos de protección personal',
+  STIHL: 'Equipos y repuestos Stihl', PALIN: 'Herramientas y suministros agrícolas',
+  EPP: 'Elementos de protección personal', NOLI: 'Línea Noli',
+  POLEN: 'Insumos de polinización', SEM: 'Semillas', AGROLAB: 'Laboratorio / varios',
+  CUCHILLO: 'Herramientas y suministros agrícolas', MEZCLA: 'Fertilizantes edáficos/granulados',
+  ACE: 'Herbicidas', CASCARILLA: 'Insumos orgánicos', FUN: 'Herramientas y suministros agrícolas',
+  HER: 'Herramientas y suministros agrícolas', MP: 'Insumos de polinización',
+  PIEDRA: 'Herramientas y suministros agrícolas', POLINIZA: 'Insumos de polinización',
+  STHIL: 'Equipos y repuestos Stihl', TALCO: 'Insumos varios',
+};
+function prefijoDe(codigo) {
+  const m = String(codigo || '').match(/^([A-Za-z]+)/);
+  return m ? m[1].toUpperCase() : null;
+}
+function categoriaPorPrefijo(codigo) {
+  const p = prefijoDe(codigo);
+  return p ? (MAPA_PREFIJO[p] || null) : null;
+}
+
+// Alias de encabezados posibles — para que el mismo cargador sirva tanto
+// con el reporte de saldo que ya conocemos, como con un export más
+// completo el día que SAP entregue grupo/proveedor/unidad reales.
+// El orden de cada lista importa: se busca la variante MÁS ESPECÍFICA
+// primero (ej. "cantidad acumulada", el saldo real) antes que la más
+// genérica (ej. "cantidad", que en el reporte de movimientos de SAP
+// suele venir vacía) — si se buscara sin respetar este orden, se podría
+// tomar por error la columna equivocada cuando el archivo trae varias
+// columnas parecidas.
+const ALIAS = {
+  codigo_sap: ['numero de articulo', 'número de artículo', 'codigo sap', 'código sap', 'codigo', 'código', 'item code'],
+  producto: ['descripcion', 'descripción', 'nombre', 'producto', 'item name'],
+  categoria: ['grupo de articulos', 'grupo de artículos', 'grupo', 'categoria', 'categoría', 'item group'],
+  proveedor: ['proveedor', 'vendor'],
+  unidad: ['unidad de medida', 'unidad', 'um', 'unit'],
+  cantidad: ['cantidad acumulada', 'existencia', 'stock', 'in stock', 'cantidad'],
+  costo_unit: ['costo unitario', 'costo', 'precio'],
+  valor_total: ['valor acumulado', 'valor total', 'valor'],
+};
+function normaliza(s) {
+  return String(s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').trim();
+}
+function mapaColumnas(headers) {
+  const norm = headers.map(normaliza);
+  const mapa = {};
+  Object.entries(ALIAS).forEach(([campo, alias]) => {
+    // Recorre la lista de alias EN ORDEN DE PRIORIDAD (no en el orden en
+    // que aparecen las columnas del archivo), para que la variante más
+    // específica gane si el archivo trae varias columnas parecidas.
+    for (const a of alias) {
+      const idx = norm.indexOf(a);
+      if (idx !== -1) { mapa[campo] = headers[idx]; break; }
+    }
+  });
+  return mapa;
+}
+
+let filas = [];              // todas las filas detectadas en el archivo (antes de excluir)
+let excluidos = new Map();   // prefijo (mayúsculas) -> fila de sap_prefijos_excluidos
+let checkboxExcluir = new Set(); // prefijos marcados como "excluir" en la vista previa actual
+let esSuperAdmin = false;
+let puedeAdministrarExcluidos = false;
+let sesionActual = null;
+let mensajeResultado = '';
+
+function resumenPorPrefijo(lista) {
+  const m = {};
+  lista.forEach(f => {
+    const p = prefijoDe(f.codigo_sap) || '(sin prefijo)';
+    if (!m[p]) m[p] = { count: 0, ejemplo: f.producto, categoria: f.categoria };
+    m[p].count++;
+  });
+  return m;
+}
+
+function render() {
+  const resumen = resumenPorPrefijo(filas);
+  const prefijosOrdenados = Object.keys(resumen).sort((a, b) => resumen[b].count - resumen[a].count);
+  const filasIncluidas = filas.filter(f => !checkboxExcluir.has(prefijoDe(f.codigo_sap)));
+  const preview = filasIncluidas.slice(0, 5);
+  const cols = preview.length ? Object.keys(preview[0]) : [];
+
+  document.getElementById('wrap').innerHTML = `
+    <div class="aviso">
+      ℹ️ Esta pantalla reemplaza el inventario completo con lo que traiga el archivo: actualiza los artículos que ya existen (sin tocar su sede ni los ajustes manuales de mínimo/máximo), agrega los nuevos, y elimina los que ya no aparezcan — pensada para subir todos los días el reporte completo de SAP, no un incremento.
+    </div>
+    <div class="card">
+      <h3>1. Selecciona el archivo Excel</h3>
+      <div class="drop">
+        📄 Arrastra o selecciona el archivo exportado de SAP (.xlsx)
+        <br><input type="file" id="f-archivo" accept=".xlsx,.xls">
+      </div>
+      ${mensajeResultado}
+    </div>
+    ${filas.length ? `
+    <div class="card">
+      <h3>2. Grupos detectados en el archivo (${filas.length} artículos)</h3>
+      <div style="font-size:12px;color:#777;margin-bottom:6px">Marca los que NO son de Agrotienda (ej. de otro negocio que comparte el mismo SAP) — quedan excluidos de esta carga y de las siguientes, no hay que repetirlo cada día.</div>
+      ${prefijosOrdenados.map(p => `
+        <div class="grp-row">
+          <input type="checkbox" data-prefijo="${p}" ${checkboxExcluir.has(p) ? 'checked' : ''} ${puedeAdministrarExcluidos ? '' : 'disabled'}>
+          <span class="grp-cod">${p}</span>
+          <span class="grp-nom">${resumen[p].categoria || '(sin categoría)'} — ej. "${resumen[p].ejemplo}"</span>
+          <span class="grp-cnt">${resumen[p].count} art.</span>
+          ${checkboxExcluir.has(p) ? '<span class="tag-excl">Excluido</span>' : ''}
+        </div>
+      `).join('')}
+      ${!puedeAdministrarExcluidos ? '<div style="font-size:11px;color:#999;margin-top:8px">Solo Carlos, Diego o Alejandra pueden cambiar qué grupos se excluyen.</div>' : ''}
+    </div>
+    <div class="card">
+      <h3>3. Vista previa de lo que se va a cargar (${filasIncluidas.length} artículos)</h3>
+      <table>
+        <thead><tr>${cols.map(c => `<th>${c}</th>`).join('')}</tr></thead>
+        <tbody>
+          ${preview.map(f => `<tr>${cols.map(c => `<td>${f[c] ?? '—'}</td>`).join('')}</tr>`).join('')}
+        </tbody>
+      </table>
+      <button class="btn" id="btn-confirmar" style="margin-top:14px" ${filasIncluidas.length ? '' : 'disabled'}>✅ Confirmar y cargar ${filasIncluidas.length} artículos</button>
+      <button class="btn btn-sec" id="btn-cancelar" style="margin-top:14px">Cancelar</button>
+    </div>` : ''}
+    <div class="card">
+      <h3>Grupos excluidos (no se cargan nunca, aunque aparezcan en el archivo)</h3>
+      <div id="lista-excluidos">Cargando...</div>
+      ${puedeAdministrarExcluidos ? `
+      <div class="mini-form">
+        <input type="text" id="nuevo-prefijo" placeholder="Código, ej. NOLI" style="width:110px">
+        <input type="text" id="nuevo-motivo" placeholder="Motivo (opcional)" style="flex:1;min-width:160px">
+        <button class="btn btn-sec" id="btn-agregar-excluido">+ Agregar</button>
+      </div>` : ''}
+    </div>
+    <div class="card">
+      <h3>Historial de cargas</h3>
+      <div id="historial">Cargando historial...</div>
+    </div>
+  `;
+  bind();
+  renderExcluidos();
+  cargarHistorial();
+}
+
+function renderExcluidos() {
+  const el = document.getElementById('lista-excluidos');
+  if (!el) return;
+  const lista = [...excluidos.values()];
+  if (!lista.length) { el.innerHTML = '<div style="color:#999;font-size:12px">Ningún grupo excluido todavía.</div>'; return; }
+  el.innerHTML = lista.map(x => `
+    <div class="grp-row">
+      <span class="grp-cod">${x.prefijo}</span>
+      <span class="grp-nom">${x.motivo || '—'}</span>
+      ${puedeAdministrarExcluidos ? `<button class="btn-x" data-quitar="${x.prefijo}" title="Quitar de excluidos">🗑</button>` : ''}
+    </div>
+  `).join('');
+  if (puedeAdministrarExcluidos) {
+    el.querySelectorAll('[data-quitar]').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        await sb.from('sap_prefijos_excluidos').delete().eq('prefijo', btn.dataset.quitar);
+        await cargarExcluidos();
+        render();
+      });
+    });
+  }
+}
+
+async function cargarExcluidos() {
+  const { data } = await sb.from('sap_prefijos_excluidos').select('*').order('prefijo');
+  excluidos = new Map((data || []).map(x => [x.prefijo.toUpperCase(), x]));
+  checkboxExcluir = new Set(excluidos.keys());
+}
+
+function bind() {
+  document.getElementById('f-archivo')?.addEventListener('change', async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    mensajeResultado = '';
+    const buf = await file.arrayBuffer();
+    const wb = XLSX.read(buf, { type: 'array' });
+    const hoja = wb.Sheets[wb.SheetNames[0]];
+    const json = XLSX.utils.sheet_to_json(hoja, { defval: null });
+    if (!json.length) { alert('El archivo no tiene filas.'); return; }
+
+    const headers = Object.keys(json[0]);
+    const mapa = mapaColumnas(headers);
+    if (!mapa.codigo_sap || !mapa.producto) {
+      alert('No se encontró una columna de código de artículo y/o descripción. Revisa que el archivo tenga esos datos.');
+      return;
+    }
+
+    filas = json.map(row => {
+      const codigo_sap = String(row[mapa.codigo_sap] || '').trim();
+      const producto = String(row[mapa.producto] || '').trim();
+      const cantidad = mapa.cantidad ? Number(row[mapa.cantidad]) || 0 : 0;
+      const valor_total = mapa.valor_total ? Number(row[mapa.valor_total]) || null : null;
+      let costo_unit = mapa.costo_unit ? Number(row[mapa.costo_unit]) || null : null;
+      if (costo_unit === null && valor_total !== null && cantidad) {
+        costo_unit = Math.round((valor_total / cantidad) * 10000) / 10000;
+      }
+      const categoria = mapa.categoria ? String(row[mapa.categoria] || '').trim() || null : categoriaPorPrefijo(codigo_sap);
+      const proveedor = mapa.proveedor ? String(row[mapa.proveedor] || '').trim() || null : null;
+      const unidad = mapa.unidad ? String(row[mapa.unidad] || '').trim() || null : null;
+      return { codigo_sap, producto, categoria, proveedor, unidad, cantidad, costo_unit, valor_total };
+    }).filter(f => f.codigo_sap && f.producto);
+
+    // Al detectar un archivo nuevo, se parte de los grupos ya excluidos
+    // en la base — si el archivo trae un grupo nuevo que no está en esa
+    // lista, aparece sin marcar (incluido) hasta que alguien lo excluya.
+    checkboxExcluir = new Set(excluidos.keys());
+    render();
+  });
+
+  // Marcar/desmarcar un grupo aquí lo excluye (o lo vuelve a incluir) de
+  // forma permanente, no solo para esta carga — se guarda de una vez en
+  // `sap_prefijos_excluidos`, para que Diego no tenga que repetir la
+  // marca cada día.
+  document.querySelectorAll('[data-prefijo]').forEach(chk => {
+    chk.addEventListener('change', async () => {
+      const p = chk.dataset.prefijo;
+      chk.disabled = true;
+      if (chk.checked) {
+        checkboxExcluir.add(p);
+        await sb.from('sap_prefijos_excluidos').upsert({ prefijo: p, motivo: 'Excluido desde la carga', creado_por: sesionActual.user.id });
+      } else {
+        checkboxExcluir.delete(p);
+        await sb.from('sap_prefijos_excluidos').delete().eq('prefijo', p);
+      }
+      await cargarExcluidos(); // deja checkboxExcluir sincronizado con lo que quedó guardado
+      render();
+    });
+  });
+
+  document.getElementById('btn-agregar-excluido')?.addEventListener('click', async () => {
+    const prefijo = (document.getElementById('nuevo-prefijo')?.value || '').trim().toUpperCase();
+    const motivo = (document.getElementById('nuevo-motivo')?.value || '').trim() || null;
+    if (!prefijo) { alert('Escribe el código del grupo a excluir.'); return; }
+    const { error } = await sb.from('sap_prefijos_excluidos').upsert({ prefijo, motivo, creado_por: sesionActual.user.id });
+    if (error) { alert('No se pudo agregar: ' + error.message); return; }
+    await cargarExcluidos();
+    render();
+  });
+
+  document.getElementById('btn-cancelar')?.addEventListener('click', () => {
+    filas = [];
+    mensajeResultado = '';
+    render();
+  });
+
+  document.getElementById('btn-confirmar')?.addEventListener('click', async () => {
+    const btn = document.getElementById('btn-confirmar');
+    btn.disabled = true;
+    btn.textContent = 'Cargando...';
+    const filasAEnviar = filas.filter(f => !checkboxExcluir.has(prefijoDe(f.codigo_sap)));
+    const omitidos = filas.length - filasAEnviar.length;
+    try {
+      const resp = await fetch('/api/cargar-inventario', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${sesionActual.access_token}`,
+        },
+        body: JSON.stringify({ articulos: filasAEnviar }),
+      });
+      const data = await resp.json();
+      if (!resp.ok) {
+        mensajeResultado = `<div class="msg err">❌ ${data.error || 'No se pudo cargar'}</div>`;
+      } else {
+        mensajeResultado = `
+          <div class="resumen">
+            <span class="chip-r nuevo">${data.nuevos} nuevos</span>
+            <span class="chip-r">${data.actualizados} actualizados</span>
+            <span class="chip-r elim">${data.eliminados} eliminados</span>
+          </div>
+          <div class="msg ok">✅ Inventario actualizado correctamente (${data.total} artículos procesados)${omitidos ? `, ${omitidos} omitidos por ser de grupos excluidos` : ''}.</div>
+        `;
+        filas = [];
+      }
+    } catch (e) {
+      mensajeResultado = `<div class="msg err">❌ Error de red: ${e.message}</div>`;
+    }
+    render();
+    cargarHistorial();
+  });
+}
+
+function fmtFechaHora(iso) {
+  if (!iso) return '—';
+  return new Date(iso).toLocaleString('es-CO', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+}
+
+async function cargarHistorial() {
+  const el = document.getElementById('historial');
+  if (!el) return;
+  const { data, error } = await sb.from('sync_log').select('*').eq('modulo', 'inventario').order('fecha', { ascending: false }).limit(10);
+  if (error) { el.innerHTML = `<div style="color:#999;font-size:12px">No se pudo cargar el historial.</div>`; return; }
+  if (!data || !data.length) { el.innerHTML = `<div style="color:#999;font-size:12px">Todavía no hay cargas registradas.</div>`; return; }
+  el.innerHTML = data.map(l => `
+    <div class="hist-row">
+      <span>${fmtFechaHora(l.fecha)}</span>
+      <span style="flex:1;padding:0 10px">${l.mensaje || '—'}</span>
+      <span class="hist-estado ${l.status === 'ok' ? 'hist-ok' : 'hist-error'}">${l.status}</span>
+    </div>
+  `).join('');
+}
+
+(async () => {
+  const { data: { session } } = await sb.auth.getSession();
+  if (!session) { window.location.href = 'login.html'; return; }
+  sesionActual = session;
+
+  const [{ data: perfil }, { data: permisos }] = await Promise.all([
+    sb.from('perfiles').select('*').eq('id', session.user.id).single(),
+    sb.from('permisos_modulo').select('*').eq('perfil_id', session.user.id),
+  ]);
+  if (!perfil) {
+    document.getElementById('wrap').innerHTML = '<div class="loading">Tu usuario no tiene un perfil configurado todavía.</div>';
+    return;
+  }
+
+  esSuperAdmin = perfil.es_super_admin;
+  const cargo = (perfil.cargo || '').toLowerCase();
+  const autorizado = esSuperAdmin || cargo.includes('almacén') || cargo.includes('almacen');
+
+  if (!autorizado) {
+    document.getElementById('wrap').innerHTML = '<div class="loading">No tienes permiso para usar esta pantalla — está reservada para quien carga el inventario.</div>';
+    return;
+  }
+
+  const nivel2 = (permisos || []).find(p => p.modulo === 2)?.nivel || 'inactivo';
+  puedeAdministrarExcluidos = esSuperAdmin || nivel2 === 'completo';
+
+  await cargarExcluidos();
+  render();
+})();
+</script>
+
+</body>
+</html>

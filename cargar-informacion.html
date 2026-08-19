@@ -60,7 +60,7 @@ const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 // normales del Hub.
 const CARGAS = [
   { id: 'inventario', nombre: 'Inventario', desc: 'Artículos, cantidades y valores (alimenta 1.5, 2.1, 2.6, 2.8)', icono: '📦', href: 'carga-inventario.html', listo: true },
-  { id: 'ventas', nombre: 'Ventas', desc: 'Histórico de ventas (alimenta 1.3, 1.5, 2.1, 2.3, 3.1)', icono: '🧾', listo: false },
+  { id: 'ventas', nombre: 'Ventas', desc: 'Histórico de ventas (alimenta 1.3, 1.5, 2.1, 2.3, 3.1)', icono: '🧾', href: 'cargar-ventas.html', listo: true },
   { id: 'precios', nombre: 'Listado de precios', desc: 'Precios y disponibilidad por sede (Módulo 5, público)', icono: '🏷️', listo: false },
   { id: 'cartera', nombre: 'Cartera de clientes', desc: 'Facturas, vencimientos y saldos (alimenta 2.4, 3.2)', icono: '💳', listo: false },
   { id: 'clientes_sap', nombre: 'Clientes SAP', desc: 'Maestro de clientes con NIT, cupo y saldo', icono: '🧑‍💼', listo: false },

@@ -1,0 +1,9 @@
+{
+  "name": "crm-bioplanta",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Backend serverless del CRM de Agrotienda Bioplanta (funciones de apoyo que necesitan la llave secreta de Supabase, como el Panel de Gestión de Accesos).",
+  "dependencies": {
+    "@supabase/supabase-js": "^2.45.0"
+  }
+}

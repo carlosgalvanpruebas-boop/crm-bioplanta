@@ -1,0 +1,434 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Agrotienda Bioplanta · Panel de Gestión de Accesos</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+:root{--v1:#33513a;--v2:#4f7c5a;--v3:#84a38c;--v4:#a9c2af;--vbg:#eaefeb;--vlt:#f4f8f5;--texto:#1a2e1a;--beige:#e6ceab;--vino:#984745}
+body{font-family:'Segoe UI',system-ui,sans-serif;background:#f0f4f0;color:var(--texto);min-height:100vh}
+.header{background:linear-gradient(135deg,var(--v1),var(--v2));color:#fff;padding:16px 20px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;box-shadow:0 2px 12px rgba(0,0,0,.2)}
+.hdr-l{display:flex;align-items:center;gap:10px}
+.logo-ico{font-size:26px}
+.brand{font-size:15px;font-weight:800}
+.brand-sub{font-size:11px;opacity:.8}
+.hdr-r{display:flex;align-items:center;gap:10px}
+.btn-h{background:rgba(255,255,255,.15);border:1px solid rgba(255,255,255,.3);color:#fff;padding:7px 16px;border-radius:20px;font-size:12px;cursor:pointer;font-family:inherit;text-decoration:none}
+
+.wrap{max-width:1150px;margin:0 auto;padding:24px 18px 60px}
+.loading{text-align:center;padding:80px;color:#888}
+.bloqueo{max-width:480px;margin:60px auto;background:#fff;border-radius:16px;padding:30px;text-align:center;box-shadow:0 2px 10px rgba(0,0,0,.08)}
+
+.card{background:#fff;border-radius:16px;padding:22px;box-shadow:0 2px 10px rgba(0,0,0,.07);margin-bottom:22px}
+.card-t{font-size:15px;font-weight:800;color:var(--v1);margin-bottom:4px}
+.card-sub{font-size:12px;color:#777;margin-bottom:16px}
+
+table{width:100%;border-collapse:collapse;font-size:13px}
+th{text-align:left;padding:9px 8px;color:var(--v2);font-size:11px;text-transform:uppercase;letter-spacing:.4px;border-bottom:2px solid var(--vbg)}
+td{padding:10px 8px;border-bottom:1px solid var(--vbg);vertical-align:top}
+.nom-cell b{display:block;font-size:13px}
+.nom-cell span{font-size:11.5px;color:#777}
+
+.mod-cell{min-width:150px}
+select.nivel-sel{width:100%;padding:6px 7px;border-radius:7px;border:1.5px solid #d6e2d9;font-size:12px;font-family:inherit;background:#fff}
+select.nivel-sel.completo{border-color:var(--v3);background:var(--vlt)}
+select.nivel-sel.parcial{border-color:var(--beige);background:#fdf8f0}
+.subm-panel{margin-top:7px;background:var(--vlt);border-radius:8px;padding:8px 9px;display:none}
+.subm-panel.on{display:block}
+.subm-item{display:flex;align-items:center;gap:6px;font-size:11.5px;padding:2px 0}
+.subm-item input{cursor:pointer}
+
+.acciones{display:flex;flex-direction:column;gap:6px;min-width:120px}
+.btn-mini{border:none;border-radius:7px;padding:6px 9px;font-size:11.5px;cursor:pointer;font-family:inherit;font-weight:600;text-align:center}
+.btn-guardar{background:var(--v2);color:#fff}
+.btn-guardar:disabled{opacity:.5;cursor:default}
+.btn-clave{background:var(--beige);color:var(--v1)}
+.btn-borrar{background:#fde8e8;color:var(--vino)}
+.guardado-ok{font-size:11px;color:var(--v2);font-weight:700;display:none}
+
+.form-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.field{display:flex;flex-direction:column;gap:5px}
+.field label{font-size:12px;font-weight:600;color:var(--v2)}
+.field input,.field select{border:1.5px solid #d6e2d9;border-radius:8px;padding:9px 10px;font-size:13px;font-family:inherit;outline:none}
+.field.full{grid-column:1 / -1}
+.perm-inicial{display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-top:4px}
+.perm-inicial .mini-t{font-size:11.5px;font-weight:700;color:var(--v1);margin-bottom:5px}
+.btn-crear{margin-top:16px;background:linear-gradient(135deg,var(--v1),var(--v2));color:#fff;border:none;padding:12px 22px;border-radius:10px;font-size:13.5px;font-weight:700;cursor:pointer;font-family:inherit}
+.btn-crear:disabled{opacity:.6}
+
+.msg{margin-top:12px;padding:10px 12px;border-radius:8px;font-size:12.5px}
+.msg.err{background:#fde8e8;color:#a00}
+.msg.ok{background:#e6f4ea;color:#256d3b}
+
+.modal-bg{position:fixed;inset:0;background:rgba(0,0,0,.45);display:none;align-items:center;justify-content:center;z-index:50}
+.modal-bg.on{display:flex}
+.modal{background:#fff;border-radius:14px;padding:24px;max-width:380px;width:90%}
+.modal h3{font-size:15px;color:var(--v1);margin-bottom:10px}
+.modal p{font-size:13px;color:#555;margin-bottom:16px}
+.modal .field{margin-bottom:14px}
+.modal-btns{display:flex;gap:10px;justify-content:flex-end}
+.modal-btns button{border:none;padding:9px 16px;border-radius:8px;font-size:12.5px;font-weight:700;cursor:pointer;font-family:inherit}
+.mb-cancel{background:#eee;color:#555}
+.mb-ok{background:var(--v2);color:#fff}
+.mb-ok.borrar{background:var(--vino)}
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div class="hdr-l">
+    <div class="logo-ico">🔐</div>
+    <div>
+      <div class="brand">Panel de Gestión de Accesos</div>
+      <div class="brand-sub">Solo visible para el Super Administrador</div>
+    </div>
+  </div>
+  <div class="hdr-r">
+    <a class="btn-h" href="hub.html">← Hub</a>
+  </div>
+</div>
+
+<div class="wrap" id="wrap">
+  <div class="loading">Cargando...</div>
+</div>
+
+<!-- Modal: eliminar -->
+<div class="modal-bg" id="modal-eliminar">
+  <div class="modal">
+    <h3>Eliminar empleado</h3>
+    <p id="modal-eliminar-texto"></p>
+    <div class="modal-btns">
+      <button class="mb-cancel" onclick="cerrarModales()">Cancelar</button>
+      <button class="mb-ok borrar" id="btn-confirmar-eliminar">Sí, eliminar</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal: restablecer contraseña -->
+<div class="modal-bg" id="modal-clave">
+  <div class="modal">
+    <h3>Restablecer contraseña</h3>
+    <p id="modal-clave-texto"></p>
+    <div class="field">
+      <label>Nueva contraseña (mínimo 6 caracteres)</label>
+      <input type="text" id="input-nueva-clave" placeholder="Ej: Bioplanta2026">
+    </div>
+    <div class="msg err" id="msg-clave" style="display:none"></div>
+    <div class="modal-btns">
+      <button class="mb-cancel" onclick="cerrarModales()">Cancelar</button>
+      <button class="mb-ok" id="btn-confirmar-clave">Guardar contraseña</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const SUPABASE_URL = 'https://fpqogvxssnoarzgxcitc.supabase.co';
+const SUPABASE_KEY = 'sb_publishable_ccZF-8tenblFEah5lXfd3w_mYTHMtMC';
+const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+const SUBMODULOS = {
+  1: [{id:'1.1',n:'Registro de clientes'},{id:'1.2',n:'Sugerido de compra'},{id:'1.3',n:'Resumen venta'},{id:'1.4',n:'Tablero de tareas'},{id:'1.5',n:'Seguimiento de inventario'},{id:'1.6',n:'Cuadre de caja'},{id:'1.7',n:'Solicitudes de pedido'},{id:'1.8',n:'Fertilización de palma'}],
+  2: [{id:'2.1',n:'Análisis de inventario'},{id:'2.2',n:'Sugerido de compras'},{id:'2.3',n:'Registro de ventas'},{id:'2.4',n:'Cartera clientes'},{id:'2.6',n:'Base de datos clientes'},{id:'2.7',n:'Productores de palma'},{id:'2.8',n:'Resumen inventario'},{id:'2.9',n:'Fertilización de palma'}],
+  3: [{id:'3.1',n:'Ventas por almacén'},{id:'3.2',n:'Cartera'},{id:'3.3',n:'Cuentas por pagar/cobrar'},{id:'3.4',n:'Resumen almacén'}],
+};
+const NOMBRE_MODULO = {1:'1. Mostrador', 2:'2. Administrativo', 3:'3. Gerencia'};
+
+let miToken = null;
+let perfiles = [];
+let permisosPorPerfil = {}; // perfil_id -> { 1:{nivel,submodulos_parciales}, 2:{...}, 3:{...} }
+let accionPendiente = null; // { tipo, id, nombre }
+
+function permisoDe(perfilId, modulo) {
+  const p = (permisosPorPerfil[perfilId] || {})[modulo];
+  return p || { nivel: 'inactivo', submodulos_parciales: [] };
+}
+
+function renderTablaEquipo() {
+  let html = `<table><thead><tr>
+    <th>Empleado</th><th>Módulo 1</th><th>Módulo 2</th><th>Módulo 3</th><th>Acciones</th>
+  </tr></thead><tbody>`;
+
+  perfiles.forEach(p => {
+    html += `<tr data-fila="${p.id}">
+      <td class="nom-cell"><b>${p.nombre}</b><span>${p.cargo} · ${p.sede}${p.es_super_admin ? ' · 👑 Super Admin' : ''}</span></td>`;
+
+    [1,2,3].forEach(mod => {
+      const perm = permisoDe(p.id, mod);
+      const subs = SUBMODULOS[mod];
+      html += `<td class="mod-cell">
+        <select class="nivel-sel ${perm.nivel}" data-perfil="${p.id}" data-modulo="${mod}" ${p.es_super_admin ? 'disabled' : ''} onchange="onCambiaNivel(this)">
+          <option value="inactivo" ${perm.nivel==='inactivo'?'selected':''}>Inactivo</option>
+          <option value="parcial" ${perm.nivel==='parcial'?'selected':''}>Parcial</option>
+          <option value="completo" ${perm.nivel==='completo'?'selected':''}>Completo</option>
+        </select>
+        <div class="subm-panel ${perm.nivel==='parcial'?'on':''}" id="subm-${p.id}-${mod}">
+          ${subs.map(s => `<label class="subm-item"><input type="checkbox" value="${s.id}" ${perm.submodulos_parciales && perm.submodulos_parciales.includes(s.id) ? 'checked':''}> ${s.id} ${s.n}</label>`).join('')}
+        </div>
+      </td>`;
+    });
+
+    html += `<td class="acciones">
+        ${p.es_super_admin ? '<span style="font-size:11px;color:#999">Sin acciones</span>' : `
+        <button class="btn-mini btn-guardar" onclick="guardarPermisos('${p.id}')">💾 Guardar</button>
+        <span class="guardado-ok" id="ok-${p.id}">✔ Guardado</span>
+        <button class="btn-mini btn-clave" onclick="abrirModalClave('${p.id}','${p.nombre.replace(/'/g,"\\'")}')">🔑 Restablecer clave</button>
+        <button class="btn-mini btn-borrar" onclick="abrirModalEliminar('${p.id}','${p.nombre.replace(/'/g,"\\'")}')">🗑️ Eliminar</button>
+        `}
+      </td>
+    </tr>`;
+  });
+
+  html += '</tbody></table>';
+  return html;
+}
+
+function onCambiaNivel(sel) {
+  sel.className = 'nivel-sel ' + sel.value;
+  const perfilId = sel.dataset.perfil, modulo = sel.dataset.modulo;
+  const panel = document.getElementById(`subm-${perfilId}-${modulo}`);
+  panel.classList.toggle('on', sel.value === 'parcial');
+}
+
+async function guardarPermisos(perfilId) {
+  const fila = document.querySelector(`tr[data-fila="${perfilId}"]`);
+  const btn = fila.querySelector('.btn-guardar');
+  btn.disabled = true; btn.textContent = 'Guardando...';
+
+  const filas = [];
+  [1,2,3].forEach(mod => {
+    const sel = fila.querySelector(`select[data-modulo="${mod}"]`);
+    const nivel = sel.value;
+    let submodulos = null;
+    if (nivel === 'parcial') {
+      submodulos = Array.from(fila.querySelectorAll(`#subm-${perfilId}-${mod} input:checked`)).map(i => i.value);
+    }
+    filas.push({ perfil_id: perfilId, modulo: mod, nivel, submodulos_parciales: submodulos });
+  });
+
+  const { error } = await sb.from('permisos_modulo').upsert(filas, { onConflict: 'perfil_id,modulo' });
+
+  btn.disabled = false; btn.textContent = '💾 Guardar';
+
+  if (error) {
+    alert('No se pudo guardar: ' + error.message);
+    return;
+  }
+
+  if (!permisosPorPerfil[perfilId]) permisosPorPerfil[perfilId] = {};
+  filas.forEach(f => permisosPorPerfil[perfilId][f.modulo] = { nivel: f.nivel, submodulos_parciales: f.submodulos_parciales || [] });
+
+  const ok = document.getElementById(`ok-${perfilId}`);
+  ok.style.display = 'inline';
+  setTimeout(() => ok.style.display = 'none', 2500);
+}
+
+function abrirModalEliminar(id, nombre) {
+  accionPendiente = { tipo: 'eliminar', id, nombre };
+  document.getElementById('modal-eliminar-texto').textContent =
+    `¿Seguro que quieres eliminar a ${nombre}? Esto borra por completo su acceso al sistema (usuario, perfil y permisos). No se puede deshacer.`;
+  document.getElementById('modal-eliminar').classList.add('on');
+}
+
+function abrirModalClave(id, nombre) {
+  accionPendiente = { tipo: 'clave', id, nombre };
+  document.getElementById('modal-clave-texto').textContent = `Escribe la nueva contraseña para ${nombre}. Se la debes compartir tú mismo (por WhatsApp, de palabra, etc.) — el sistema no le avisa automáticamente.`;
+  document.getElementById('input-nueva-clave').value = '';
+  document.getElementById('msg-clave').style.display = 'none';
+  document.getElementById('modal-clave').classList.add('on');
+}
+
+function cerrarModales() {
+  document.getElementById('modal-eliminar').classList.remove('on');
+  document.getElementById('modal-clave').classList.remove('on');
+  accionPendiente = null;
+}
+
+async function llamarApi(body) {
+  const resp = await fetch('/api/gestion-usuarios', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + miToken },
+    body: JSON.stringify(body),
+  });
+  const data = await resp.json().catch(() => ({}));
+  if (!resp.ok) throw new Error(data.error || 'Error desconocido');
+  return data;
+}
+
+document.getElementById('btn-confirmar-eliminar').addEventListener('click', async () => {
+  if (!accionPendiente || accionPendiente.tipo !== 'eliminar') return;
+  const btn = document.getElementById('btn-confirmar-eliminar');
+  btn.disabled = true; btn.textContent = 'Eliminando...';
+  try {
+    await llamarApi({ accion: 'eliminar_usuario', id: accionPendiente.id });
+    cerrarModales();
+    await cargarTodo();
+  } catch (e) {
+    alert('No se pudo eliminar: ' + e.message);
+  }
+  btn.disabled = false; btn.textContent = 'Sí, eliminar';
+});
+
+document.getElementById('btn-confirmar-clave').addEventListener('click', async () => {
+  if (!accionPendiente || accionPendiente.tipo !== 'clave') return;
+  const nueva = document.getElementById('input-nueva-clave').value;
+  const msg = document.getElementById('msg-clave');
+  if (!nueva || nueva.length < 6) {
+    msg.textContent = 'La contraseña debe tener al menos 6 caracteres.';
+    msg.style.display = 'block';
+    return;
+  }
+  const btn = document.getElementById('btn-confirmar-clave');
+  btn.disabled = true; btn.textContent = 'Guardando...';
+  try {
+    await llamarApi({ accion: 'resetear_password', id: accionPendiente.id, password: nueva });
+    cerrarModales();
+    alert('Contraseña actualizada. Ahora compártesela a la persona.');
+  } catch (e) {
+    msg.textContent = e.message;
+    msg.style.display = 'block';
+  }
+  btn.disabled = false; btn.textContent = 'Guardar contraseña';
+});
+
+function renderFormNuevo() {
+  const optsSede = ['Chigorodó','Belén de Bajirá','Ambas'].map(s => `<option value="${s}">${s}</option>`).join('');
+  const permHtml = [1,2,3].map(mod => `
+    <div>
+      <div class="mini-t">${NOMBRE_MODULO[mod]}</div>
+      <select class="field" id="nuevo-nivel-${mod}" style="width:100%;padding:8px;border-radius:8px;border:1.5px solid #d6e2d9;font-size:12.5px" onchange="onCambiaNivelNuevo(${mod})">
+        <option value="inactivo">Inactivo</option>
+        <option value="parcial">Parcial</option>
+        <option value="completo">Completo</option>
+      </select>
+      <div class="subm-panel" id="nuevo-subm-${mod}" style="margin-top:6px">
+        ${SUBMODULOS[mod].map(s => `<label class="subm-item"><input type="checkbox" value="${s.id}"> ${s.id} ${s.n}</label>`).join('')}
+      </div>
+    </div>
+  `).join('');
+
+  return `
+    <div class="card">
+      <div class="card-t">➕ Agregar nuevo empleado</div>
+      <div class="card-sub">Crea su usuario de acceso y sus permisos iniciales por módulo. Los módulos 4 (Proveedor) y 5 (Precios) son públicos y no necesitan configurarse aquí.</div>
+      <div class="form-grid">
+        <div class="field"><label>Nombre completo</label><input type="text" id="nuevo-nombre" placeholder="Ej: Laura Gómez"></div>
+        <div class="field"><label>Cargo</label><input type="text" id="nuevo-cargo" placeholder="Ej: Mostrador"></div>
+        <div class="field"><label>Correo (será su usuario)</label><input type="email" id="nuevo-correo" placeholder="correo@bioplanta.co"></div>
+        <div class="field"><label>Sede</label><select id="nuevo-sede">${optsSede}</select></div>
+        <div class="field"><label>Contraseña inicial (mín. 6 caracteres)</label><input type="text" id="nuevo-clave" placeholder="Ej: Bioplanta2026"></div>
+      </div>
+      <div class="perm-inicial">${permHtml}</div>
+      <div class="msg err" id="msg-nuevo" style="display:none"></div>
+      <div class="msg ok" id="msg-nuevo-ok" style="display:none"></div>
+      <button class="btn-crear" id="btn-crear" onclick="crearEmpleado()">Crear empleado</button>
+    </div>
+  `;
+}
+
+function onCambiaNivelNuevo(mod) {
+  const nivel = document.getElementById(`nuevo-nivel-${mod}`).value;
+  document.getElementById(`nuevo-subm-${mod}`).classList.toggle('on', nivel === 'parcial');
+}
+
+async function crearEmpleado() {
+  const nombre = document.getElementById('nuevo-nombre').value.trim();
+  const cargo = document.getElementById('nuevo-cargo').value.trim();
+  const email = document.getElementById('nuevo-correo').value.trim();
+  const sede = document.getElementById('nuevo-sede').value;
+  const password = document.getElementById('nuevo-clave').value;
+  const msgErr = document.getElementById('msg-nuevo');
+  const msgOk = document.getElementById('msg-nuevo-ok');
+  msgErr.style.display = 'none'; msgOk.style.display = 'none';
+
+  if (!nombre || !cargo || !email || !password) {
+    msgErr.textContent = 'Completa nombre, cargo, correo y contraseña.';
+    msgErr.style.display = 'block';
+    return;
+  }
+  if (password.length < 6) {
+    msgErr.textContent = 'La contraseña debe tener al menos 6 caracteres.';
+    msgErr.style.display = 'block';
+    return;
+  }
+
+  const btn = document.getElementById('btn-crear');
+  btn.disabled = true; btn.textContent = 'Creando...';
+
+  try {
+    const resultado = await llamarApi({ accion: 'crear_usuario', email, password, nombre, cargo, sede });
+    const nuevoId = resultado.id;
+
+    const filas = [];
+    [1,2,3].forEach(mod => {
+      const nivel = document.getElementById(`nuevo-nivel-${mod}`).value;
+      let submodulos = null;
+      if (nivel === 'parcial') {
+        submodulos = Array.from(document.querySelectorAll(`#nuevo-subm-${mod} input:checked`)).map(i => i.value);
+      }
+      if (nivel !== 'inactivo') {
+        filas.push({ perfil_id: nuevoId, modulo: mod, nivel, submodulos_parciales: submodulos });
+      }
+    });
+
+    if (filas.length) {
+      const { error } = await sb.from('permisos_modulo').insert(filas);
+      if (error) throw new Error('El usuario se creó, pero hubo un problema guardando sus permisos: ' + error.message);
+    }
+
+    msgOk.textContent = `¡Listo! ${nombre} ya puede entrar con su correo y contraseña.`;
+    msgOk.style.display = 'block';
+    document.getElementById('nuevo-nombre').value = '';
+    document.getElementById('nuevo-cargo').value = '';
+    document.getElementById('nuevo-correo').value = '';
+    document.getElementById('nuevo-clave').value = '';
+    await cargarTodo();
+  } catch (e) {
+    msgErr.textContent = e.message;
+    msgErr.style.display = 'block';
+  }
+
+  btn.disabled = false; btn.textContent = 'Crear empleado';
+}
+
+async function cargarTodo() {
+  const [{ data: perfilesData }, { data: permisosData }] = await Promise.all([
+    sb.from('perfiles').select('*').order('nombre'),
+    sb.from('permisos_modulo').select('*'),
+  ]);
+
+  perfiles = perfilesData || [];
+  permisosPorPerfil = {};
+  (permisosData || []).forEach(p => {
+    if (!permisosPorPerfil[p.perfil_id]) permisosPorPerfil[p.perfil_id] = {};
+    permisosPorPerfil[p.perfil_id][p.modulo] = { nivel: p.nivel, submodulos_parciales: p.submodulos_parciales || [] };
+  });
+
+  document.getElementById('wrap').innerHTML = `
+    <div class="card">
+      <div class="card-t">Equipo actual (${perfiles.length})</div>
+      <div class="card-sub">Cambia el nivel de acceso de cada módulo y guarda. Si eliges "Parcial", marca los submódulos exactos a los que puede entrar.</div>
+      ${renderTablaEquipo()}
+    </div>
+    ${renderFormNuevo()}
+  `;
+}
+
+(async () => {
+  const { data: { session } } = await sb.auth.getSession();
+  if (!session) { window.location.href = 'login.html'; return; }
+  miToken = session.access_token;
+
+  const { data: perfil } = await sb.from('perfiles').select('*').eq('id', session.user.id).single();
+  if (!perfil || !perfil.es_super_admin) {
+    document.getElementById('wrap').innerHTML = `<div class="bloqueo">🔒 Este panel es exclusivo del Super Administrador.<br><br><a href="hub.html">← Volver al Hub</a></div>`;
+    return;
+  }
+
+  await cargarTodo();
+})();
+</script>
+
+</body>
+</html>

@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Agrotienda Bioplanta · Márgenes de precio</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+:root{--v1:#33513a;--v2:#4f7c5a;--v3:#84a38c;--v4:#a9c2af;--vbg:#eaefeb;--vlt:#f4f8f5;--texto:#1a2e1a;--beige:#e6ceab;--vino:#984745}
+body{font-family:'Segoe UI',system-ui,sans-serif;background:#f0f4f0;color:var(--texto);min-height:100vh}
+.header{background:linear-gradient(135deg,var(--v1),var(--v2));color:#fff;padding:16px 20px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;box-shadow:0 2px 12px rgba(0,0,0,.2)}
+.hdr-l{display:flex;align-items:center;gap:10px}
+.logo-ico{font-size:26px}
+.brand{font-size:15px;font-weight:800}
+.brand-sub{font-size:11px;opacity:.8}
+.btn-h{background:rgba(255,255,255,.15);border:1px solid rgba(255,255,255,.3);color:#fff;padding:7px 16px;border-radius:20px;font-size:12px;cursor:pointer;font-family:inherit;text-decoration:none}
+
+.wrap{max-width:1000px;margin:0 auto;padding:18px 18px 60px}
+.loading{text-align:center;padding:80px;color:#888}
+.aviso{background:var(--beige);color:var(--v1);border-radius:10px;padding:12px 16px;font-size:12.5px;margin-bottom:16px;line-height:1.5}
+.card{background:#fff;border-radius:16px;padding:20px;box-shadow:0 2px 10px rgba(0,0,0,.07);margin-bottom:18px}
+.card h3{font-size:14px;color:var(--v1);margin-bottom:10px}
+
+table{width:100%;border-collapse:collapse;font-size:12.5px}
+th,td{text-align:left;padding:9px 8px;border-bottom:1px solid var(--vbg)}
+th{color:var(--v2);font-size:10.5px;text-transform:uppercase}
+td.num,th.num{text-align:right}
+input.margen{width:70px;border:1.5px solid #d6e2d9;border-radius:6px;padding:5px 8px;font-size:12.5px;font-family:inherit;text-align:right}
+.btn{background:var(--v2);color:#fff;border:none;border-radius:8px;padding:6px 14px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit}
+.btn:disabled{opacity:.5;cursor:default}
+.btn-g{background:var(--v1);padding:10px 20px;font-size:13px;margin-top:14px}
+.precio{font-weight:800;color:var(--v1)}
+.tag-nuevo{font-size:10px;font-weight:700;padding:2px 8px;border-radius:8px;background:#fde3e2;color:var(--vino);margin-left:6px}
+.msg{padding:10px 14px;border-radius:8px;font-size:13px;margin-top:12px}
+.msg.ok{background:#e6f4ea;color:#256d3b}
+.msg.err{background:#fde3e2;color:var(--vino)}
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div class="hdr-l">
+    <div class="logo-ico">🏷️</div>
+    <div>
+      <div class="brand">Márgenes de precio</div>
+      <div class="brand-sub">Define el % de ganancia por grupo — el precio de venta se calcula solo</div>
+    </div>
+  </div>
+  <a class="btn-h" href="cargar-informacion.html">← Cargar información</a>
+</div>
+
+<div class="wrap" id="wrap">
+  <div class="loading">Cargando...</div>
+</div>
+
+<script>
+const SUPABASE_URL = 'https://fpqogvxssnoarzgxcitc.supabase.co';
+const SUPABASE_KEY = 'sb_publishable_ccZF-8tenblFEah5lXfd3w_mYTHMtMC';
+const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+let filas = [];       // [{categoria, count, cantidad, valor, costo_prom, margen_pct, esNuevo}]
+let puedeEditar = false;
+let sesionActual = null;
+let mensaje = '';
+
+function fmtMoneda(n) {
+  return '$' + Math.round(n || 0).toLocaleString('es-CO');
+}
+
+function render() {
+  document.getElementById('wrap').innerHTML = `
+    <div class="aviso">
+      ℹ️ El precio de venta de cada producto se calcula como <b>costo promedio del grupo × (1 + margen)</b> — no se guarda un precio fijo por artículo, así que si cambias el margen de un grupo, todos sus precios se actualizan de inmediato. Esta pantalla alimenta el futuro Listado de Precios público (Módulo 5); el margen en sí NO es público, solo el precio final.
+    </div>
+    <div class="card">
+      <h3>Márgenes por grupo (${filas.length})</h3>
+      <table>
+        <thead>
+          <tr>
+            <th>Categoría</th>
+            <th class="num">Artículos</th>
+            <th class="num">Costo prom./und</th>
+            <th class="num">Margen (%)</th>
+            <th class="num">Precio de venta sugerido</th>
+            ${puedeEditar ? '<th></th>' : ''}
+          </tr>
+        </thead>
+        <tbody>
+          ${filas.map((f, i) => `
+            <tr>
+              <td>${f.categoria}${f.esNuevo ? '<span class="tag-nuevo">Nuevo, sin margen guardado</span>' : ''}</td>
+              <td class="num">${f.count}</td>
+              <td class="num">${fmtMoneda(f.costo_prom)}</td>
+              <td class="num">${puedeEditar ? `<input type="number" step="0.1" class="margen" data-i="${i}" value="${f.margen_pct}">` : (f.margen_pct + '%')}</td>
+              <td class="num precio" id="precio-${i}">${fmtMoneda(f.costo_prom * (1 + f.margen_pct / 100))}</td>
+              ${puedeEditar ? `<td><button class="btn" data-guardar="${i}">Guardar</button></td>` : ''}
+            </tr>
+          `).join('')}
+        </tbody>
+      </table>
+      ${puedeEditar ? '<button class="btn btn-g" id="btn-guardar-todo">💾 Guardar todos los cambios</button>' : ''}
+      ${mensaje}
+    </div>
+  `;
+  bind();
+}
+
+function bind() {
+  document.querySelectorAll('input.margen').forEach(inp => {
+    inp.addEventListener('input', () => {
+      const i = Number(inp.dataset.i);
+      filas[i].margen_pct = Number(inp.value) || 0;
+      const precioEl = document.getElementById(`precio-${i}`);
+      if (precioEl) precioEl.textContent = fmtMoneda(filas[i].costo_prom * (1 + filas[i].margen_pct / 100));
+    });
+  });
+
+  document.querySelectorAll('[data-guardar]').forEach(btn => {
+    btn.addEventListener('click', () => guardar([Number(btn.dataset.guardar)]));
+  });
+
+  document.getElementById('btn-guardar-todo')?.addEventListener('click', () => {
+    guardar(filas.map((_, i) => i));
+  });
+}
+
+async function guardar(indices) {
+  mensaje = '';
+  const payload = indices.map(i => ({
+    categoria: filas[i].categoria,
+    margen_pct: filas[i].margen_pct,
+    actualizado_en: new Date().toISOString(),
+    actualizado_por: sesionActual.user.id,
+  }));
+  const { error } = await sb.from('margenes_categoria').upsert(payload, { onConflict: 'categoria' });
+  if (error) {
+    mensaje = `<div class="msg err">❌ No se pudo guardar: ${error.message}</div>`;
+  } else {
+    indices.forEach(i => { filas[i].esNuevo = false; });
+    mensaje = `<div class="msg ok">✅ Guardado correctamente.</div>`;
+  }
+  render();
+}
+
+async function cargarDatos() {
+  const [{ data: inv, error: errInv }, { data: margenes, error: errMar }] = await Promise.all([
+    sb.from('inventario').select('categoria, cantidad, valor_total'),
+    sb.from('margenes_categoria').select('*'),
+  ]);
+
+  if (errInv || errMar) {
+    document.getElementById('wrap').innerHTML = `<div class="loading">No se pudo cargar la información: ${(errInv || errMar).message}</div>`;
+    return;
+  }
+
+  const agregados = {};
+  (inv || []).forEach(r => {
+    const cat = r.categoria || '(sin categoría)';
+    if (!agregados[cat]) agregados[cat] = { count: 0, cantidad: 0, valor: 0 };
+    agregados[cat].count++;
+    agregados[cat].cantidad += Number(r.cantidad) || 0;
+    agregados[cat].valor += Number(r.valor_total) || 0;
+  });
+
+  const margenesMap = new Map((margenes || []).map(m => [m.categoria, m.margen_pct]));
+
+  filas = Object.entries(agregados)
+    .map(([categoria, g]) => ({
+      categoria,
+      count: g.count,
+      costo_prom: g.cantidad ? g.valor / g.cantidad : 0,
+      margen_pct: margenesMap.has(categoria) ? Number(margenesMap.get(categoria)) : 0,
+      esNuevo: !margenesMap.has(categoria),
+    }))
+    .sort((a, b) => b.count - a.count);
+
+  render();
+}
+
+(async () => {
+  const { data: { session } } = await sb.auth.getSession();
+  if (!session) { window.location.href = 'login.html'; return; }
+  sesionActual = session;
+
+  const [{ data: perfil }, { data: permisos }] = await Promise.all([
+    sb.from('perfiles').select('*').eq('id', session.user.id).single(),
+    sb.from('permisos_modulo').select('*').eq('perfil_id', session.user.id),
+  ]);
+  if (!perfil) {
+    document.getElementById('wrap').innerHTML = '<div class="loading">Tu usuario no tiene un perfil configurado todavía.</div>';
+    return;
+  }
+
+  const nivel2 = (permisos || []).find(p => p.modulo === 2)?.nivel || 'inactivo';
+  const puedeVer = perfil.es_super_admin || nivel2 !== 'inactivo';
+  if (!puedeVer) {
+    document.getElementById('wrap').innerHTML = '<div class="loading">No tienes permiso para ver esta pantalla.</div>';
+    return;
+  }
+  puedeEditar = perfil.es_super_admin || nivel2 === 'completo';
+
+  await cargarDatos();
+})();
+</script>
+
+</body>
+</html>

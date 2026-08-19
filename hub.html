@@ -78,6 +78,7 @@ const SUBMODULOS = {
         { id:'1.6', nombre:'Cuadre de caja', href:'cuadre-caja.html', listo:true },
         { id:'1.7', nombre:'Solicitudes de pedido', href:'solicitudes-pedido.html', listo:true },
         { id:'1.8', nombre:'Fertilización de palma', href:'fertilizacion-palma.html', listo:true },
+        { id:'1.9', nombre:'Preconteo de inventario', href:'resumen-inventario.html', listo:true },
       ]},
   2: { nombre: 'Administrativo', icono: '📊', items: [
         { id:'2.1', nombre:'Análisis de inventario', href:'analisis-inventario.html', listo:true },
@@ -189,6 +190,7 @@ async function cargarBadges(userId, perfil, nivel2) {
       sb.from('descuadres_inventario').select('id', { count: 'exact', head: true }).eq('estado', 'abierto'),
     ]);
     pintarBadge('2.8', (cSorteos || 0) + (cAbiertos || 0));
+    pintarBadge('1.9', (cSorteos || 0) + (cAbiertos || 0));
   } catch (e) {}
 
   // 2.2 Sugerido de compras: reportes pendientes de autorizar

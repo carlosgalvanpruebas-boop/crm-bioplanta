@@ -68,6 +68,15 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:#f0f4f0;color:var(--
 .filtro-bandeja button{background:#fff;border:1.5px solid var(--v3);color:var(--v2);padding:6px 13px;border-radius:16px;font-size:11.5px;font-weight:700;cursor:pointer;font-family:inherit}
 .filtro-bandeja button.act{background:var(--v2);color:#fff;border-color:var(--v2)}
 .vacio{text-align:center;padding:30px;color:#999;font-size:13px}
+.cot-list-item{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:12px 0;border-bottom:1px solid var(--vbg);flex-wrap:wrap}
+.cot-list-item:last-child{border-bottom:none}
+.cot-list-info{font-size:12.5px}
+.cot-list-info b{font-size:13.5px;color:var(--v1);display:block}
+.cot-list-meta{font-size:11px;color:#888;margin-top:2px}
+.cot-list-btns{display:flex;gap:6px;align-items:center}
+.btn-eliminar{background:#fde3e2;color:var(--vino)}
+.buscador-cot{margin-bottom:14px}
+.buscador-cot input{width:100%;border:1.5px solid #d6e2d9;border-radius:8px;padding:9px 10px;font-size:13px;font-family:inherit}
 </style>
 </head>
 <body>
@@ -101,7 +110,7 @@ let puedeVerBandeja = false;
 let esSuperAdmin = false;
 let vistaActual = 'reportar';
 let filtroBandeja = 'pendiente';
-let cache = { misReportes: [], bandeja: [], cotizaciones: {} };
+let cache = { misReportes: [], bandeja: [], cotizaciones: {}, listaCotizaciones: [], usosCotizaciones: {} };
 
 function fmtFecha(iso) {
   if (!iso) return '';
@@ -120,6 +129,7 @@ function renderNav() {
   if (puedeReportar) tabs.push({ id: 'reportar', label: '📝 Reportar oportunidad' });
   tabs.push({ id: 'mis-reportes', label: '📋 Mis reportes' });
   if (puedeVerBandeja) tabs.push({ id: 'bandeja', label: '📥 Bandeja de autorización' });
+  if (puedeVerBandeja) tabs.push({ id: 'cotizaciones', label: '🗂️ Cotizaciones' });
 
   document.getElementById('nav').innerHTML = tabs.map(t =>
     `<button class="btn-nav ${vistaActual === t.id ? 'act' : ''}" onclick="irA('${t.id}')">${t.label}</button>`
@@ -132,6 +142,7 @@ function irA(vista) {
   if (vista === 'reportar') renderReportar();
   else if (vista === 'mis-reportes') renderMisReportes();
   else if (vista === 'bandeja') renderBandeja();
+  else if (vista === 'cotizaciones') renderCotizaciones();
 }
 
 function origenDeCargo(cargo) {
@@ -396,6 +407,84 @@ function renderPanelCotizaciones(reporte, cots) {
 
   html += `</div>`;
   return html;
+}
+
+// ---------------------------------------------------------
+// COTIZACIONES (listado + eliminar viejas)
+// ---------------------------------------------------------
+async function renderCotizaciones() {
+  document.getElementById('wrap').innerHTML = '<div class="loading">Cargando cotizaciones...</div>';
+
+  const [{ data: cots, error }, { data: vinculos }] = await Promise.all([
+    sb.from('cotizaciones_proveedor').select('*').order('created_at', { ascending: false }),
+    sb.from('cotizacion_reporte').select('*'),
+  ]);
+
+  if (error) {
+    document.getElementById('wrap').innerHTML = `<div class="card"><div class="msg err" style="display:block">No se pudo cargar: ${error.message}</div></div>`;
+    return;
+  }
+
+  const usos = {};
+  (vinculos || []).forEach(v => { usos[v.cotizacion_id] = (usos[v.cotizacion_id] || 0) + 1; });
+
+  cache.listaCotizaciones = cots || [];
+  cache.usosCotizaciones = usos;
+
+  document.getElementById('wrap').innerHTML = `
+    <div class="card">
+      <div class="card-t">🗂️ Cotizaciones de proveedores (${cache.listaCotizaciones.length})</div>
+      <div class="card-sub">Todas las que han subido los proveedores en 4.1. Se pueden reutilizar en varios pedidos — elimina aquí las que ya estén muy viejas o no necesites más.</div>
+      <div class="buscador-cot"><input type="text" id="buscar-cot" placeholder="Buscar por proveedor o producto..." oninput="pintarListaCotizaciones()"></div>
+      <div id="lista-cotizaciones"></div>
+    </div>
+  `;
+  pintarListaCotizaciones();
+}
+
+function pintarListaCotizaciones() {
+  const q = (document.getElementById('buscar-cot').value || '').toLowerCase().trim();
+  const lista = cache.listaCotizaciones.filter(c =>
+    !q || c.proveedor_nombre.toLowerCase().includes(q) || c.producto_servicio.toLowerCase().includes(q)
+  );
+
+  const cont = document.getElementById('lista-cotizaciones');
+  if (!lista.length) {
+    cont.innerHTML = '<div class="vacio">No hay cotizaciones que coincidan.</div>';
+    return;
+  }
+
+  cont.innerHTML = lista.map(c => {
+    const usos = cache.usosCotizaciones[c.id] || 0;
+    return `
+      <div class="cot-list-item">
+        <div class="cot-list-info">
+          <b>${c.proveedor_nombre} — ${c.producto_servicio}</b>
+          <div class="cot-list-meta">${fmtCOP(c.valor_cotizado)} · ${c.sede || 'Ambas'} · ${fmtFecha(c.created_at)} · ${usos ? `usada en ${usos} pedido${usos > 1 ? 's' : ''}` : 'sin usar todavía'}</div>
+        </div>
+        <div class="cot-list-btns">
+          <a href="${c.archivo_url}" target="_blank" class="btn-mini btn-vincular" style="text-decoration:none">📎 Ver</a>
+          ${esSuperAdmin ? `<button class="btn-mini btn-eliminar" onclick="eliminarCotizacion('${c.id}')">🗑️ Eliminar</button>` : ''}
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+
+async function eliminarCotizacion(id) {
+  if (!confirm('¿Eliminar esta cotización? Esta acción no se puede deshacer.')) return;
+
+  const { error } = await sb.from('cotizaciones_proveedor').delete().eq('id', id);
+  if (error) {
+    if (error.code === '23503') {
+      alert('No se puede eliminar: esta cotización ya está usada en una solicitud de pedido real (1.7), así que queda protegida para no perder ese historial.');
+    } else {
+      alert('No se pudo eliminar: ' + error.message);
+    }
+    return;
+  }
+
+  await renderCotizaciones();
 }
 
 function cambiarFiltroBandeja(f) {

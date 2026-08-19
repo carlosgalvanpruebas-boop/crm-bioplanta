@@ -19,6 +19,7 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--gris);color:va
 .hdr-btns{display:flex;gap:8px;flex-wrap:wrap}
 .btn-h{background:rgba(255,255,255,.15);border:1px solid rgba(255,255,255,.3);color:#fff;padding:7px 16px;border-radius:20px;font-size:12px;cursor:pointer;font-family:inherit;text-decoration:none;display:inline-block}
 .btn-h:hover{background:rgba(255,255,255,.28)}
+.btn-h-act{background:var(--v4);border-color:var(--v4);color:var(--v1);font-weight:700}
 .colab-bar{margin-top:12px;font-size:12px;opacity:.85}
 .session-badge{background:var(--v4);color:var(--v1);padding:4px 12px;border-radius:16px;font-weight:700;margin-left:6px}
 
@@ -31,6 +32,17 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--gris);color:va
 .res-item:hover{background:var(--vbg)}
 .res-item b{color:var(--v1)}
 .res-item span{color:#5a6e5e;font-size:11.5px;display:block;margin-top:2px}
+
+.pend-header{background:#fff;border-radius:14px;padding:16px 18px;box-shadow:0 2px 10px rgba(0,0,0,.07);margin-bottom:14px}
+.pend-header h2{color:var(--v1);font-size:16px}
+.pend-header .sub{font-size:12px;color:#888;margin-top:3px}
+.pend-card{background:#fff;border-radius:12px;padding:12px 16px;box-shadow:0 1px 6px rgba(0,0,0,.07);margin-bottom:8px;cursor:pointer}
+.pend-card:hover{background:var(--vlt)}
+.pend-card b{color:var(--v1);font-size:13.5px}
+.pend-card .sub{font-size:11.5px;color:#888;margin-top:1px}
+.pend-prods{display:flex;gap:6px;flex-wrap:wrap;margin-top:6px}
+.pend-chip{background:var(--vino-lt);color:var(--vino);font-size:11px;font-weight:600;padding:3px 9px;border-radius:10px}
+.pend-sinvincular{background:var(--vlt);border-radius:10px;padding:10px 14px;font-size:12.5px;color:#5a6e5e;margin-top:6px}
 
 .ficha{background:#fff;border-radius:14px;padding:20px;box-shadow:0 2px 10px rgba(0,0,0,.07);margin-top:16px}
 .ficha-top{display:flex;justify-content:space-between;align-items:flex-start;gap:10px;flex-wrap:wrap}
@@ -101,6 +113,8 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--gris);color:va
       </div>
     </div>
     <div class="hdr-btns">
+      <button class="btn-h btn-h-act" id="btn-nav-buscar">Buscar productor</button>
+      <button class="btn-h" id="btn-nav-pendientes">Pendientes del mes</button>
       <a class="btn-h" href="hub.html">← Hub</a>
     </div>
   </div>
@@ -176,36 +190,117 @@ function mesActualNombre() {
   return MESES[new Date().getMonth()];
 }
 
+function marcarNavActivo(vista) {
+  document.getElementById('btn-nav-buscar').classList.toggle('btn-h-act', vista === 'buscar');
+  document.getElementById('btn-nav-pendientes').classList.toggle('btn-h-act', vista === 'pendientes');
+}
+
+function pintarListaProductores(lista) {
+  const list = document.getElementById('res-list');
+  list.innerHTML = lista.length === 0
+    ? '<div class="empty">Sin resultados</div>'
+    : lista.map(p => `
+      <div class="res-item" data-id="${p.id}">
+        <b>${p.predio}</b> — ${p.productor_nombre}
+        <span>${p.municipio || '—'} · ${p.hectareas_total ? p.hectareas_total + ' ha' : ''}</span>
+      </div>`).join('');
+  list.querySelectorAll('.res-item').forEach(el => {
+    el.addEventListener('click', () => abrirProductor(el.dataset.id));
+  });
+}
+
 function renderBuscador() {
+  marcarNavActivo('buscar');
   document.getElementById('app').innerHTML = `
     <div class="search-box">
       <input type="text" id="buscar" placeholder="Buscar por predio, productor o cédula...">
       <div class="res-list" id="res-list"></div>
     </div>
   `;
+  const listaOrdenada = [...productores].sort((a, b) => (a.predio || '').localeCompare(b.predio || ''));
+  pintarListaProductores(listaOrdenada);
+
   const input = document.getElementById('buscar');
   input.addEventListener('input', () => {
     const q = input.value.trim().toLowerCase();
-    const list = document.getElementById('res-list');
-    if (q.length < 2) { list.innerHTML = ''; return; }
+    if (q.length === 0) { pintarListaProductores(listaOrdenada); return; }
     const encontrados = productores.filter(p =>
       (p.predio || '').toLowerCase().includes(q) ||
       (p.productor_nombre || '').toLowerCase().includes(q) ||
       (p.productor_cedula || '').includes(q)
-    ).slice(0, 25);
-    list.innerHTML = encontrados.length === 0
-      ? '<div class="empty">Sin resultados</div>'
-      : encontrados.map(p => `
-        <div class="res-item" data-id="${p.id}">
-          <b>${p.predio}</b> — ${p.productor_nombre}
-          <span>${p.municipio || '—'} · ${p.hectareas_total ? p.hectareas_total + ' ha' : ''}</span>
-        </div>`).join('');
-    list.querySelectorAll('.res-item').forEach(el => {
-      el.addEventListener('click', () => abrirProductor(el.dataset.id));
-    });
+    );
+    pintarListaProductores(encontrados);
   });
-  input.focus();
 }
+
+async function renderPendientes() {
+  marcarNavActivo('pendientes');
+  document.getElementById('app').innerHTML = '<div class="empty">⏳ Buscando quién falta este mes...</div>';
+
+  const mesHoy = mesActualNombre();
+  const ahora = new Date();
+  const anioActual = ahora.getFullYear();
+  const mesNum = ahora.getMonth() + 1;
+  const primerDia = `${anioActual}-${String(mesNum).padStart(2, '0')}-01`;
+  const ultimoDiaNum = new Date(anioActual, mesNum, 0).getDate();
+  const ultimoDia = `${anioActual}-${String(mesNum).padStart(2, '0')}-${String(ultimoDiaNum).padStart(2, '0')}`;
+
+  const [{ data: planMes }, { data: registrosMes }] = await Promise.all([
+    sb.from('plan_fertilizacion_palma').select('*').eq('mes', mesHoy),
+    sb.from('registro_fertilizacion_palma').select('productor_id, producto, fecha').gte('fecha', primerDia).lte('fecha', ultimoDia),
+  ]);
+
+  const registrosSet = new Set((registrosMes || []).map(r => `${r.productor_id}|${r.producto}`));
+
+  const pendientesPorProductor = new Map();
+  const sinVincular = [];
+
+  (planMes || []).forEach(f => {
+    const yaHecho = registrosSet.has(`${f.productor_id}|${f.producto}`);
+    if (yaHecho) return;
+    if (!f.productor_id) {
+      sinVincular.push(f);
+      return;
+    }
+    if (!pendientesPorProductor.has(f.productor_id)) pendientesPorProductor.set(f.productor_id, []);
+    pendientesPorProductor.get(f.productor_id).push(f);
+  });
+
+  const items = Array.from(pendientesPorProductor.entries()).map(([productorId, filas]) => {
+    const p = productores.find(x => x.id === productorId);
+    return { productorId, p, filas };
+  }).filter(it => it.p).sort((a, b) => (a.p.predio || '').localeCompare(b.p.predio || ''));
+
+  const listaHtml = items.length === 0
+    ? '<div class="empty">🎉 Todos los productores con plan cargado ya tienen registrada su fertilización de este mes.</div>'
+    : items.map(it => `
+      <div class="pend-card" data-id="${it.productorId}">
+        <b>${it.p.predio}</b> — ${it.p.productor_nombre}
+        <div class="sub">${it.p.municipio || '—'}</div>
+        <div class="pend-prods">${it.filas.map(f => `<span class="pend-chip">${f.producto} · ${fmtBultos(f.cantidad_bultos)}</span>`).join('')}</div>
+      </div>`).join('');
+
+  const sinVincularHtml = sinVincular.length === 0 ? '' : `
+    <div class="pend-sinvincular">
+      <b>⚠️ ${sinVincular.length} ciclo(s) de "${mesHoy}" pertenecen a planes sin vincular a un predio todavía</b> (ej. Pedro Cobos de Bajiraceites) — vincúlalos desde Supabase para que aparezcan aquí con su ficha completa.
+    </div>`;
+
+  document.getElementById('app').innerHTML = `
+    <div class="pend-header">
+      <h2>Pendientes de ${mesHoy}</h2>
+      <div class="sub">${items.length} productor(es) con plan cargado que todavía no han registrado su fertilización de este mes</div>
+    </div>
+    ${listaHtml}
+    ${sinVincularHtml}
+  `;
+
+  document.querySelectorAll('.pend-card').forEach(el => {
+    el.addEventListener('click', () => abrirProductor(el.dataset.id));
+  });
+}
+
+document.getElementById('btn-nav-buscar').addEventListener('click', renderBuscador);
+document.getElementById('btn-nav-pendientes').addEventListener('click', renderPendientes);
 
 async function abrirProductor(id) {
   productorActual = productores.find(p => p.id === id);

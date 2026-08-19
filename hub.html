@@ -80,7 +80,7 @@ const SUBMODULOS = {
         { id:'1.8', nombre:'Fertilización de palma', href:'fertilizacion-palma.html', listo:true },
       ]},
   2: { nombre: 'Administrativo', icono: '📊', items: [
-        { id:'2.1', nombre:'Análisis de inventario' },
+        { id:'2.1', nombre:'Análisis de inventario', href:'analisis-inventario.html', listo:true },
         { id:'2.2', nombre:'Sugerido de compras', href:'sugerido-compra.html', listo:true },
         { id:'2.3', nombre:'Registro de ventas' },
         { id:'2.4', nombre:'Cartera clientes' },
@@ -169,12 +169,14 @@ async function cargarBadges(userId, perfil, nivel2) {
     pintarBadge('1.4', count);
   } catch (e) { /* si falla la consulta, simplemente no se muestra el número */ }
 
-  // 1.5 Seguimiento de inventario: productos agotados (cantidad = 0).
-  // No incluye "stock bajo" aquí (requiere cruzar con el histórico de
-  // ventas) — ese detalle completo se ve dentro de la página misma.
+  // 1.5 Seguimiento de inventario y 2.1 Análisis de inventario:
+  // productos agotados (cantidad = 0). No incluye "stock bajo" ni
+  // "próximo a agotarse" aquí (requieren cruzar con el histórico de
+  // ventas) — ese detalle completo se ve dentro de cada página.
   try {
     const { count } = await sb.from('inventario').select('id', { count: 'exact', head: true }).lte('cantidad', 0);
     pintarBadge('1.5', count);
+    pintarBadge('2.1', count);
   } catch (e) {}
 
   // 2.2 Sugerido de compras: reportes pendientes de autorizar

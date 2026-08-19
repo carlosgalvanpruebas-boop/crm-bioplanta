@@ -1,0 +1,317 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Agrotienda Bioplanta · Análisis de inventario</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+:root{--v1:#33513a;--v2:#4f7c5a;--v3:#84a38c;--v4:#a9c2af;--vbg:#eaefeb;--vlt:#f4f8f5;--texto:#1a2e1a;--beige:#e6ceab;--vino:#984745}
+body{font-family:'Segoe UI',system-ui,sans-serif;background:#f0f4f0;color:var(--texto);min-height:100vh}
+.header{background:linear-gradient(135deg,var(--v1),var(--v2));color:#fff;padding:16px 20px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;box-shadow:0 2px 12px rgba(0,0,0,.2)}
+.hdr-l{display:flex;align-items:center;gap:10px}
+.logo-ico{font-size:26px}
+.brand{font-size:15px;font-weight:800}
+.brand-sub{font-size:11px;opacity:.8}
+.btn-h{background:rgba(255,255,255,.15);border:1px solid rgba(255,255,255,.3);color:#fff;padding:7px 16px;border-radius:20px;font-size:12px;cursor:pointer;font-family:inherit;text-decoration:none}
+
+.wrap{max-width:1150px;margin:0 auto;padding:18px 18px 60px}
+.loading{text-align:center;padding:80px;color:#888}
+
+.aviso{background:var(--beige);color:var(--v1);border-radius:10px;padding:12px 16px;font-size:12.5px;margin-bottom:16px;line-height:1.5}
+
+.indicadores{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:12px;margin-bottom:18px}
+.ind{background:#fff;border-radius:14px;padding:14px 16px;box-shadow:0 2px 10px rgba(0,0,0,.06)}
+.ind b{display:block;font-size:22px;font-weight:800}
+.ind span{font-size:11.5px;color:#777}
+.ind.sinstock b{color:var(--vino)}
+.ind.proximo b{color:#b8860b}
+.ind.sobre b{color:var(--v1)}
+.ind.normal b{color:var(--v2)}
+
+.filtros{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px;align-items:center}
+.filtros select,.filtros input{border:1.5px solid #d6e2d9;border-radius:8px;padding:8px 10px;font-size:12.5px;font-family:inherit}
+.filtros input{flex:1;min-width:180px}
+.filtro-chip{background:#fff;border:1.5px solid var(--v3);color:var(--v2);padding:6px 13px;border-radius:16px;font-size:11.5px;font-weight:700;cursor:pointer;font-family:inherit}
+.filtro-chip.act{background:var(--v2);color:#fff;border-color:var(--v2)}
+
+.card{background:#fff;border-radius:16px;padding:20px;box-shadow:0 2px 10px rgba(0,0,0,.07)}
+.fila{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:12px 0;border-bottom:1px solid var(--vbg);flex-wrap:wrap}
+.fila:last-child{border-bottom:none}
+.f-info{flex:1;min-width:200px}
+.f-prod{font-size:14px;font-weight:800;color:var(--v1)}
+.f-meta{font-size:11.5px;color:#888;margin-top:2px}
+.f-datos{display:flex;gap:16px;align-items:center;flex-wrap:wrap}
+.f-num{text-align:center}
+.f-num b{display:block;font-size:15px}
+.f-num span{font-size:10px;color:#888}
+.manual-tag{font-size:9px;color:var(--v2);font-weight:700}
+.badge{font-size:10.5px;font-weight:700;padding:3px 10px;border-radius:10px;white-space:nowrap}
+.b-sinstock{background:#fde3e2;color:var(--vino)}
+.b-proximo{background:var(--beige);color:#8a5a00}
+.b-sobre{background:var(--v4);color:var(--v1)}
+.b-normal{background:#e6f4ea;color:#256d3b}
+.btn-mini{border:none;border-radius:7px;padding:8px 12px;font-size:11px;cursor:pointer;font-family:inherit;font-weight:700;background:var(--v2);color:#fff;white-space:nowrap}
+.btn-mini.editar{background:var(--vbg);color:var(--v1)}
+.editar-box{display:flex;gap:6px;align-items:center;background:var(--vlt);padding:6px 8px;border-radius:8px}
+.editar-box input{width:70px;border:1.5px solid #d6e2d9;border-radius:6px;padding:5px 6px;font-size:11.5px;font-family:inherit}
+.vacio{text-align:center;padding:40px;color:#999;font-size:13px}
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div class="hdr-l">
+    <div class="logo-ico">📊</div>
+    <div>
+      <div class="brand">Análisis de inventario</div>
+      <div class="brand-sub">Rotación, cobertura y niveles de compra</div>
+    </div>
+  </div>
+  <a class="btn-h" href="hub.html">← Hub</a>
+</div>
+
+<div class="wrap" id="wrap">
+  <div class="loading">Cargando...</div>
+</div>
+
+<script>
+const SUPABASE_URL = 'https://fpqogvxssnoarzgxcitc.supabase.co';
+const SUPABASE_KEY = 'sb_publishable_ccZF-8tenblFEah5lXfd3w_mYTHMtMC';
+const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+let esSuperAdmin = false;
+let puedeEditar = false;
+let productos = [];
+let filtroEstado = 'todos';
+let filtroSede = 'todas';
+let filtroTexto = '';
+let orden = 'cobertura';
+let editandoId = null;
+
+function fmtFecha(iso) {
+  if (!iso) return '—';
+  return new Date(iso).toLocaleDateString('es-CO', { day: '2-digit', month: 'short', year: 'numeric' });
+}
+function fmtNum(n) {
+  if (n === null || n === undefined) return '—';
+  return Number(n).toLocaleString('es-CO', { maximumFractionDigits: 1 });
+}
+
+function calcularEstado(p) {
+  const cantidad = Number(p.cantidad) || 0;
+  if (cantidad <= 0) return 'sinstock';
+  if (p.coberturaDias !== null && p.coberturaDias <= 7) return 'proximo';
+  if (p.maximoEfectivo !== null && cantidad > Number(p.maximoEfectivo)) return 'sobre';
+  return 'normal';
+}
+
+function badgeEstado(estado) {
+  const map = {
+    sinstock: { txt: 'Sin stock', cls: 'b-sinstock' },
+    proximo: { txt: 'Próximo a agotarse', cls: 'b-proximo' },
+    sobre: { txt: 'Sobre stock', cls: 'b-sobre' },
+    normal: { txt: 'Normal', cls: 'b-normal' },
+  }[estado];
+  return `<span class="badge ${map.cls}">${map.txt}</span>`;
+}
+
+function renderIndicadores(lista) {
+  const sinstock = lista.filter(p => calcularEstado(p) === 'sinstock').length;
+  const proximo = lista.filter(p => calcularEstado(p) === 'proximo').length;
+  const sobre = lista.filter(p => calcularEstado(p) === 'sobre').length;
+  const normal = lista.filter(p => calcularEstado(p) === 'normal').length;
+  return `
+    <div class="indicadores">
+      <div class="ind sinstock"><b>${sinstock}</b><span>Sin stock</span></div>
+      <div class="ind proximo"><b>${proximo}</b><span>Próximos a agotarse</span></div>
+      <div class="ind sobre"><b>${sobre}</b><span>Sobre stock</span></div>
+      <div class="ind normal"><b>${normal}</b><span>Normal</span></div>
+    </div>
+  `;
+}
+
+function aplicarFiltros() {
+  let lista = productos.filter(p => {
+    if (filtroEstado !== 'todos' && calcularEstado(p) !== filtroEstado) return false;
+    if (filtroSede === 'sinclasificar' && p.sede) return false;
+    if (filtroSede !== 'todas' && filtroSede !== 'sinclasificar' && p.sede !== filtroSede) return false;
+    if (filtroTexto && !(p.producto || '').toLowerCase().includes(filtroTexto.toLowerCase())) return false;
+    return true;
+  });
+  if (orden === 'cobertura') {
+    lista = lista.slice().sort((a, b) => {
+      const ca = a.coberturaDias === null ? Infinity : a.coberturaDias;
+      const cb = b.coberturaDias === null ? Infinity : b.coberturaDias;
+      return ca - cb;
+    });
+  } else {
+    lista = lista.slice().sort((a, b) => (b.ventas30 || 0) - (a.ventas30 || 0));
+  }
+  return lista;
+}
+
+function badgeEstadoTexto(estado) {
+  return { sinstock: 'sin stock', proximo: 'próximo a agotarse' }[estado] || estado;
+}
+
+function filaEditar(p) {
+  return `
+    <div class="editar-box">
+      <input type="number" id="edit-min-${p.id}" placeholder="Mínimo" value="${p.stock_minimo_manual !== null && p.stock_minimo_manual !== undefined ? p.stock_minimo_manual : ''}">
+      <input type="number" id="edit-max-${p.id}" placeholder="Máximo" value="${p.stock_maximo_manual !== null && p.stock_maximo_manual !== undefined ? p.stock_maximo_manual : ''}">
+      <button class="btn-mini" onclick="guardarManual('${p.id}')">💾</button>
+      <button class="btn-mini editar" onclick="editandoId=null; render()">✕</button>
+    </div>
+  `;
+}
+
+function render() {
+  const lista = aplicarFiltros();
+
+  const filasHtml = lista.length
+    ? lista.map(p => {
+        const estado = calcularEstado(p);
+        const puedeReportar = estado === 'sinstock' || estado === 'proximo';
+        const urlReporte = puedeReportar
+          ? `sugerido-compra.html?producto=${encodeURIComponent(p.producto)}&urgencia=${estado === 'sinstock' ? 'Alta' : 'Normal'}&motivo=${encodeURIComponent('Detectado en Análisis de inventario (2.1): ' + badgeEstadoTexto(estado))}`
+          : null;
+        const minTiene = p.stock_minimo_manual !== null && p.stock_minimo_manual !== undefined;
+        const maxTiene = p.stock_maximo_manual !== null && p.stock_maximo_manual !== undefined;
+        return `
+          <div class="fila">
+            <div class="f-info">
+              <div class="f-prod">${p.producto || '(sin nombre)'}</div>
+              <div class="f-meta">${p.categoria || 'Sin categoría'} · ${p.sede || 'Sin clasificar'} · Actualizado: ${fmtFecha(p.actualizado_en)}</div>
+            </div>
+            <div class="f-datos">
+              <div class="f-num"><b>${fmtNum(p.cantidad)}</b><span>${p.unidad || 'unid.'}</span></div>
+              <div class="f-num"><b>${fmtNum(p.ventas30)}</b><span>venta 30d</span></div>
+              <div class="f-num"><b>${p.coberturaDias !== null ? fmtNum(p.coberturaDias) + 'd' : '—'}</b><span>cobertura</span></div>
+              <div class="f-num"><b>${fmtNum(p.minimoEfectivo)}</b>${minTiene ? '<span class="manual-tag">manual</span>' : '<span>mínimo</span>'}</div>
+              <div class="f-num"><b>${fmtNum(p.maximoEfectivo)}</b>${maxTiene ? '<span class="manual-tag">manual</span>' : '<span>máximo</span>'}</div>
+              ${badgeEstado(estado)}
+              ${urlReporte ? `<a class="btn-mini" href="${urlReporte}">📩 Reportar</a>` : ''}
+              ${puedeEditar ? (editandoId === p.id ? filaEditar(p) : `<button class="btn-mini editar" onclick="editandoId='${p.id}'; render()">✏️ Ajustar</button>`) : ''}
+            </div>
+          </div>
+        `;
+      }).join('')
+    : '<div class="vacio">No hay productos que coincidan con el filtro.</div>';
+
+  document.getElementById('wrap').innerHTML = `
+    <div class="aviso">
+      ℹ️ "Venta 30d" y "cobertura" vienen del histórico real de ventas (hoy solo hay datos de prueba, no el día a día real). Cobertura = días que dura el stock actual al ritmo de venta de los últimos 30 días — se marca "Próximo a agotarse" cuando quedan 7 días o menos (el mismo tiempo de entrega usado en 1.5). El mínimo/máximo mostrado es el calculado automáticamente en 1.5, salvo que ${puedeEditar ? 'lo ajustes manualmente con el botón "✏️ Ajustar" (útil para productos estacionales o casos especiales)' : 'alguien con Módulo 2 completo lo haya ajustado manualmente'}.
+    </div>
+    ${renderIndicadores(productos)}
+    <div class="filtros">
+      <select onchange="filtroSede=this.value; render()">
+        <option value="todas" ${filtroSede === 'todas' ? 'selected' : ''}>Todas las sedes</option>
+        <option value="Chigorodó" ${filtroSede === 'Chigorodó' ? 'selected' : ''}>Chigorodó</option>
+        <option value="Belén de Bajirá" ${filtroSede === 'Belén de Bajirá' ? 'selected' : ''}>Belén de Bajirá</option>
+        <option value="Ambas" ${filtroSede === 'Ambas' ? 'selected' : ''}>Ambas</option>
+        <option value="sinclasificar" ${filtroSede === 'sinclasificar' ? 'selected' : ''}>Sin clasificar</option>
+      </select>
+      <select onchange="orden=this.value; render()">
+        <option value="cobertura" ${orden === 'cobertura' ? 'selected' : ''}>Más urgente primero (menor cobertura)</option>
+        <option value="rotacion" ${orden === 'rotacion' ? 'selected' : ''}>Mayor rotación primero (más venta)</option>
+      </select>
+      <button class="filtro-chip ${filtroEstado === 'todos' ? 'act' : ''}" onclick="filtroEstado='todos'; render()">Todos</button>
+      <button class="filtro-chip ${filtroEstado === 'sinstock' ? 'act' : ''}" onclick="filtroEstado='sinstock'; render()">Sin stock</button>
+      <button class="filtro-chip ${filtroEstado === 'proximo' ? 'act' : ''}" onclick="filtroEstado='proximo'; render()">Próximos a agotarse</button>
+      <button class="filtro-chip ${filtroEstado === 'sobre' ? 'act' : ''}" onclick="filtroEstado='sobre'; render()">Sobre stock</button>
+      <input type="text" placeholder="Buscar producto..." value="${filtroTexto}" oninput="filtroTexto=this.value; render()">
+    </div>
+    <div class="card">${filasHtml}</div>
+  `;
+}
+
+async function guardarManual(id) {
+  const minVal = document.getElementById(`edit-min-${id}`).value;
+  const maxVal = document.getElementById(`edit-max-${id}`).value;
+  const { error } = await sb.from('inventario').update({
+    stock_minimo_manual: minVal === '' ? null : parseFloat(minVal),
+    stock_maximo_manual: maxVal === '' ? null : parseFloat(maxVal),
+  }).eq('id', id);
+  if (error) {
+    alert('No se pudo guardar: ' + error.message);
+    return;
+  }
+  const p = productos.find(x => String(x.id) === String(id));
+  if (p) {
+    p.stock_minimo_manual = minVal === '' ? null : parseFloat(minVal);
+    p.stock_maximo_manual = maxVal === '' ? null : parseFloat(maxVal);
+    p.minimoEfectivo = p.stock_minimo_manual !== null ? p.stock_minimo_manual : p.stock_minimo_sugerido;
+    p.maximoEfectivo = p.stock_maximo_manual !== null ? p.stock_maximo_manual : p.stock_maximo_sugerido;
+  }
+  editandoId = null;
+  render();
+}
+
+(async () => {
+  const { data: { session } } = await sb.auth.getSession();
+  if (!session) { window.location.href = 'login.html'; return; }
+
+  const userId = session.user.id;
+  const [{ data: perfil }, { data: permisos }] = await Promise.all([
+    sb.from('perfiles').select('*').eq('id', userId).single(),
+    sb.from('permisos_modulo').select('*').eq('perfil_id', userId),
+  ]);
+
+  if (!perfil) {
+    document.getElementById('wrap').innerHTML = '<div class="loading">Tu usuario no tiene un perfil configurado todavía.</div>';
+    return;
+  }
+  esSuperAdmin = perfil.es_super_admin;
+
+  const nivel2 = (permisos || []).find(p => p.modulo === 2)?.nivel || 'inactivo';
+  const puedeVer = esSuperAdmin || nivel2 !== 'inactivo';
+  puedeEditar = esSuperAdmin || nivel2 === 'completo';
+
+  if (!puedeVer) {
+    document.getElementById('wrap').innerHTML = '<div class="loading">No tienes permiso para ver este módulo.</div>';
+    return;
+  }
+
+  const [{ data: inv, error: errInv }, { data: stock }, { data: ventas }] = await Promise.all([
+    sb.from('inventario').select('*').order('producto', { ascending: true }),
+    sb.from('vista_stock_sugerido').select('*'),
+    sb.from('resumen_ventas').select('*'),
+  ]);
+
+  if (errInv) {
+    document.getElementById('wrap').innerHTML = '<div class="loading">No se pudo cargar el inventario: ' + errInv.message + '</div>';
+    return;
+  }
+
+  const stockPorCodigo = {};
+  (stock || []).forEach(s => { stockPorCodigo[s.codigo_sap] = s; });
+  const ventasPorCodigo = {};
+  (ventas || []).forEach(v => { ventasPorCodigo[v.codigo_sap] = v; });
+
+  productos = (inv || []).map(p => {
+    const s = stockPorCodigo[p.codigo_sap];
+    const v = ventasPorCodigo[p.codigo_sap];
+    const stock_minimo_sugerido = s ? s.stock_minimo_sugerido : null;
+    const stock_maximo_sugerido = s ? s.stock_maximo_sugerido : null;
+    const ventas30 = v ? Number(v.ventas_30d) : null;
+    const cantidad = Number(p.cantidad) || 0;
+    const coberturaDias = (ventas30 && ventas30 > 0) ? Math.round((cantidad / (ventas30 / 30)) * 10) / 10 : null;
+    return {
+      ...p,
+      stock_minimo_sugerido,
+      stock_maximo_sugerido,
+      minimoEfectivo: (p.stock_minimo_manual !== null && p.stock_minimo_manual !== undefined) ? p.stock_minimo_manual : stock_minimo_sugerido,
+      maximoEfectivo: (p.stock_maximo_manual !== null && p.stock_maximo_manual !== undefined) ? p.stock_maximo_manual : stock_maximo_sugerido,
+      ventas30,
+      coberturaDias,
+    };
+  });
+
+  render();
+})();
+</script>
+
+</body>
+</html>

@@ -102,6 +102,10 @@ const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
 const CARGOS_NO_RECIBEN = ['Directora Administrativa', 'Gerente'];
 
+function prioTexto(p) {
+  return p === 'alta' ? 'Alta' : p === 'media' ? 'Media' : p === 'baja' ? 'Baja' : (p || '');
+}
+
 let userId = null;
 let miNombre = '';
 let perfiles = [];      // {id, nombre, cargo}
@@ -147,8 +151,9 @@ function htmlNueva() {
     </div>
     <div class="field"><label>Prioridad</label>
       <select id="f-prio">
-        <option value="Normal">Normal</option>
-        <option value="Alta">Alta</option>
+        <option value="baja">Baja</option>
+        <option value="media" selected>Media</option>
+        <option value="alta">Alta</option>
       </select>
     </div>
     <div class="field"><label>Fecha límite (opcional)</label>
@@ -237,13 +242,13 @@ async function renderMis() {
   const colsHtml = Object.keys(cols).map(key => {
     const items = cols[key].map(f => {
       const t = f.tareas;
-      const prioClase = t.prioridad === 'Alta' ? ' alta' : '';
+      const prioClase = t.prioridad === 'alta' ? ' alta' : '';
       return `
       <div class="card-t${prioClase}">
         <div class="card-tit">${t.titulo}</div>
         ${t.descripcion ? `<div class="card-desc">${t.descripcion}</div>` : ''}
         <div class="card-meta">
-          <span class="prio-tag${prioClase}">${t.prioridad}</span>
+          <span class="prio-tag${prioClase}">${prioTexto(t.prioridad)}</span>
           <span>${t.fecha_limite ? new Date(t.fecha_limite + 'T00:00:00').toLocaleDateString('es-CO',{day:'2-digit',month:'short'}) : ''}</span>
         </div>
         <div style="font-size:11px;color:#999;margin-top:4px">Asignada por: ${t.creado_por || '—'}</div>
@@ -306,7 +311,7 @@ async function renderTodas() {
               <div class="rowcard-tit">${t.titulo}</div>
               ${t.descripcion ? `<div class="rowcard-desc">${t.descripcion}</div>` : ''}
             </div>
-            <span class="prio-tag${t.prioridad==='Alta'?' alta':''}">${t.prioridad}</span>
+            <span class="prio-tag${t.prioridad==='alta'?' alta':''}">${prioTexto(t.prioridad)}</span>
           </div>
           <div class="rowcard-meta">Creada por ${t.creado_por || '—'} ${t.fecha_limite ? '· vence ' + new Date(t.fecha_limite+'T00:00:00').toLocaleDateString('es-CO',{day:'2-digit',month:'short',year:'numeric'}) : ''}</div>
           <div class="asignados-g">${badges || '<span class="asig-badge">Sin asignar</span>'}</div>

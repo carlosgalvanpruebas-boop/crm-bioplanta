@@ -86,7 +86,7 @@ const SUBMODULOS = {
         { id:'2.4', nombre:'Cartera clientes' },
         { id:'2.6', nombre:'Base de datos clientes' },
         { id:'2.7', nombre:'Productores de palma', href:'productores-palma.html', listo:true },
-        { id:'2.8', nombre:'Resumen inventario' },
+        { id:'2.8', nombre:'Resumen inventario', href:'resumen-inventario.html', listo:true },
         { id:'2.9', nombre:'Fertilización de palma', href:'fertilizacion-palma.html', listo:true },
       ]},
   3: { nombre: 'Gerencia', icono: '📈', items: [
@@ -177,6 +177,15 @@ async function cargarBadges(userId, perfil, nivel2) {
     const { count } = await sb.from('inventario').select('id', { count: 'exact', head: true }).lte('cantidad', 0);
     pintarBadge('1.5', count);
     pintarBadge('2.1', count);
+  } catch (e) {}
+
+  // 2.8 Resumen de inventario: sorteos de preconteo sin completar
+  // (la consulta ya respeta RLS: a cada quien solo le cuenta lo que
+  // le corresponde ver — su propio sorteo, o los de su sede si tiene
+  // Módulo 2).
+  try {
+    const { count } = await sb.from('sorteos_preconteo').select('id', { count: 'exact', head: true }).neq('estado', 'completado');
+    pintarBadge('2.8', count);
   } catch (e) {}
 
   // 2.2 Sugerido de compras: reportes pendientes de autorizar

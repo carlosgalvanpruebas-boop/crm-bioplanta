@@ -74,7 +74,7 @@ const SUBMODULOS = {
         { id:'1.2', nombre:'Sugerido de compra', href:'sugerido-compra.html', listo:true },
         { id:'1.3', nombre:'Resumen venta' },
         { id:'1.4', nombre:'Tablero de tareas', href:'tareas.html', listo:true },
-        { id:'1.5', nombre:'Seguimiento de inventario' },
+        { id:'1.5', nombre:'Seguimiento de inventario', href:'seguimiento-inventario.html', listo:true },
         { id:'1.6', nombre:'Cuadre de caja', href:'cuadre-caja.html', listo:true },
         { id:'1.7', nombre:'Solicitudes de pedido', href:'solicitudes-pedido.html', listo:true },
         { id:'1.8', nombre:'Fertilización de palma', href:'fertilizacion-palma.html', listo:true },
@@ -168,6 +168,14 @@ async function cargarBadges(userId, perfil, nivel2) {
       .eq('perfil_id', userId).neq('estado_individual', 'completada');
     pintarBadge('1.4', count);
   } catch (e) { /* si falla la consulta, simplemente no se muestra el número */ }
+
+  // 1.5 Seguimiento de inventario: productos agotados (cantidad = 0).
+  // No incluye "stock bajo" aquí (requiere cruzar con el histórico de
+  // ventas) — ese detalle completo se ve dentro de la página misma.
+  try {
+    const { count } = await sb.from('inventario').select('id', { count: 'exact', head: true }).lte('cantidad', 0);
+    pintarBadge('1.5', count);
+  } catch (e) {}
 
   // 2.2 Sugerido de compras: reportes pendientes de autorizar
   if (esSuperAdmin || (nivel2 && nivel2 !== 'inactivo')) {

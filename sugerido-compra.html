@@ -109,6 +109,7 @@ let puedeReportar = false;
 let puedeVerBandeja = false;
 let esSuperAdmin = false;
 let vistaActual = 'reportar';
+let prefillAplicado = false;
 let filtroBandeja = 'pendiente';
 let cache = { misReportes: [], bandeja: [], cotizaciones: {}, listaCotizaciones: [], usosCotizaciones: {} };
 
@@ -215,6 +216,22 @@ function renderReportar() {
     document.getElementById('rep-cantidad').value = '';
     document.getElementById('rep-motivo').value = '';
   });
+
+  // Si se llegó desde 1.5 (Seguimiento de inventario) con un producto en
+  // stock bajo o agotado, se precarga el formulario una sola vez.
+  if (!prefillAplicado) {
+    const params = new URLSearchParams(location.search);
+    const prodParam = params.get('producto');
+    if (prodParam) {
+      document.getElementById('rep-producto').value = prodParam;
+      const urg = params.get('urgencia');
+      if (urg === 'Alta' || urg === 'Normal') document.getElementById('rep-urgencia').value = urg;
+      const mot = params.get('motivo');
+      if (mot) document.getElementById('rep-motivo').value = mot;
+      history.replaceState(null, '', location.pathname);
+    }
+    prefillAplicado = true;
+  }
 }
 
 // ---------------------------------------------------------

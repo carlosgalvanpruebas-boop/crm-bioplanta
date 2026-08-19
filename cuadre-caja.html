@@ -1,0 +1,353 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Agrotienda Bioplanta · Cuadre de Caja</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+:root{--v1:#33513a;--v2:#4f7c5a;--v3:#84a38c;--v4:#a9c2af;--vbg:#eaefeb;--vlt:#f4f8f5;--gris:#f0f4f0;--texto:#1a2e1a;--beige:#e6ceab;--beige-lt:#f4e9d9;--vino:#984745;--vino-lt:#f3e9e9}
+body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--gris);color:var(--texto);min-height:100vh;font-size:14px}
+
+.header{background:linear-gradient(135deg,var(--v1),var(--v2));color:#fff;padding:16px 20px;position:sticky;top:0;z-index:20;box-shadow:0 2px 12px rgba(0,0,0,.25)}
+.hdr-top{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap}
+.logo-wrap{display:flex;align-items:center;gap:10px}
+.logo-ico{font-size:26px}
+.brand{font-size:15px;font-weight:700}
+.brand-sub{font-size:11px;opacity:.75;margin-top:1px}
+.hdr-btns{display:flex;gap:8px;flex-wrap:wrap}
+.btn-h{background:rgba(255,255,255,.15);border:1px solid rgba(255,255,255,.3);color:#fff;padding:7px 16px;border-radius:20px;font-size:12px;cursor:pointer;font-family:inherit;text-decoration:none;display:inline-block}
+.btn-h:hover{background:rgba(255,255,255,.28)}
+.btn-h-act{background:var(--v4);border-color:var(--v4);color:var(--v1);font-weight:700}
+
+.wrap{max-width:900px;margin:0 auto;padding:22px 16px 60px}
+.colab-bar{margin-top:12px;font-size:12px;opacity:.85}
+.session-badge{background:var(--v4);color:var(--v1);padding:4px 12px;border-radius:16px;font-weight:700;margin-left:6px}
+
+.form-box{background:#fff;border-radius:14px;padding:22px;box-shadow:0 2px 10px rgba(0,0,0,.07);max-width:640px;margin:0 auto}
+.field{display:flex;flex-direction:column;gap:5px;margin-bottom:14px}
+.field label{font-size:12px;font-weight:600;color:var(--v2)}
+.field input,.field select,.field textarea{border:1.5px solid #b7e4c7;border-radius:8px;padding:10px 12px;font-size:14px;font-family:inherit;outline:none;color:var(--texto);background:#fff;width:100%}
+.field textarea{resize:vertical}
+.field input:disabled,.field select:disabled{background:var(--vlt);color:#888}
+
+.sec-tag{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--v3);margin:18px 0 10px;padding-bottom:4px;border-bottom:2px solid var(--vbg)}
+.den-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+@media(max-width:480px){.den-grid{grid-template-columns:1fr}}
+.den-row{display:flex;align-items:center;gap:10px;background:var(--vlt);border-radius:8px;padding:8px 12px}
+.den-lbl{flex:1;font-size:13px;font-weight:600;color:var(--v1)}
+.den-row input{width:80px;text-align:right;border:1.5px solid #b7e4c7;border-radius:6px;padding:6px 8px}
+
+.resumen{background:var(--vbg);border-radius:10px;padding:14px 16px;margin-top:16px}
+.res-row{display:flex;justify-content:space-between;font-size:13px;padding:4px 0}
+.res-row b{color:var(--v1)}
+.res-row.dif{border-top:1.5px solid var(--v3);margin-top:6px;padding-top:8px;font-size:15px}
+.res-row.dif.neg b{color:var(--vino)}
+
+.btn-save{width:100%;margin-top:18px;padding:14px;background:linear-gradient(135deg,var(--v1),var(--v2));color:#fff;border:none;border-radius:10px;font-size:15px;font-weight:700;cursor:pointer;font-family:inherit}
+.btn-save:disabled{opacity:.55}
+.msg{margin-top:14px;padding:10px 14px;border-radius:8px;font-size:14px;text-align:center;display:none}
+.msg.ok{background:var(--vbg);color:var(--v1);display:block}
+.msg.err{background:#fde8e8;color:#a00;display:block}
+
+.fil-bar{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px}
+.fil-bar select{border:1.5px solid #b7e4c7;border-radius:8px;padding:8px 12px;font-size:13px;background:#fff;font-family:inherit;outline:none;flex:1;min-width:160px}
+.row-list{display:flex;flex-direction:column;gap:10px}
+.rowcard{background:#fff;border-radius:12px;box-shadow:0 1px 6px rgba(0,0,0,.07);padding:14px 16px}
+.rowcard-top{display:flex;justify-content:space-between;align-items:flex-start;gap:10px;flex-wrap:wrap}
+.rowcard-fecha{font-size:13.5px;font-weight:700;color:var(--v1)}
+.rowcard-sede{font-size:11px;color:#888}
+.rowcard-vals{display:flex;gap:14px;flex-wrap:wrap;margin-top:6px;font-size:12.5px}
+.rowcard-vals span b{color:var(--v1)}
+.dif-tag{font-size:12px;font-weight:800;padding:3px 10px;border-radius:10px;background:var(--v4);color:var(--v1)}
+.dif-tag.neg{background:var(--vino);color:#fff}
+.rowcard-obs{font-size:12px;color:#5a6e5e;margin-top:6px}
+.rowcard-foot{font-size:11px;color:#999;margin-top:6px}
+.empty{text-align:center;padding:48px;color:#888;font-size:14px}
+.spin{text-align:center;padding:48px;font-size:28px}
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div class="hdr-top">
+    <div class="logo-wrap">
+      <div class="logo-ico">💵</div>
+      <div>
+        <div class="brand">Cuadre de Caja</div>
+        <div class="brand-sub" style="font-style:italic;">Mostrador</div>
+      </div>
+    </div>
+    <div class="hdr-btns">
+      <button class="btn-h btn-h-act" id="btn-nuevo">+ Nuevo cuadre</button>
+      <button class="btn-h" id="btn-historico">Histórico</button>
+      <a class="btn-h" href="hub.html">← Hub</a>
+    </div>
+  </div>
+  <div class="colab-bar" id="colab-bar"></div>
+</div>
+
+<div class="wrap" id="app"><div class="spin">⏳</div></div>
+
+<script>
+const SUPABASE_URL = 'https://fpqogvxssnoarzgxcitc.supabase.co';
+const SUPABASE_KEY = 'sb_publishable_ccZF-8tenblFEah5lXfd3w_mYTHMtMC';
+const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+const DENOMS_BILLETES = [100000, 50000, 20000, 10000, 5000, 2000];
+const DENOMS_MONEDAS = [1000, 500, 200, 100];
+
+let userId = null;
+let miNombre = '';
+let miPerfil = null;
+let sedesElegibles = [];
+let sedeActual = '';
+let baseActual = 0;
+let vista = 'nuevo';
+
+function fmt(n) {
+  return '$' + Math.round(n || 0).toLocaleString('es-CO');
+}
+
+function renderColabBar() {
+  document.getElementById('colab-bar').innerHTML =
+    `Sesión: <span class="session-badge">${miNombre}</span>`;
+}
+
+function setActiveBtn() {
+  document.getElementById('btn-nuevo').classList.toggle('btn-h-act', vista === 'nuevo');
+  document.getElementById('btn-historico').classList.toggle('btn-h-act', vista === 'historico');
+}
+
+async function render() {
+  setActiveBtn();
+  if (vista === 'nuevo') { await renderNuevo(); }
+  if (vista === 'historico') { await renderHistorico(); }
+}
+
+// ── NUEVO CUADRE ─────────────────────────────────────────────────────────────
+async function cargarBase(sede) {
+  const { data } = await sb.from('base_caja_sede').select('*').eq('sede', sede).single();
+  baseActual = data ? Number(data.valor) : 0;
+}
+
+async function renderNuevo() {
+  document.getElementById('app').innerHTML = '<div class="spin">⏳</div>';
+  if (!sedeActual) sedeActual = sedesElegibles[0];
+  await cargarBase(sedeActual);
+
+  const selectorSede = sedesElegibles.length > 1
+    ? `<select id="f-sede">${sedesElegibles.map(s => `<option value="${s}"${s===sedeActual?' selected':''}>${s}</option>`).join('')}</select>`
+    : `<input type="text" value="${sedeActual}" disabled>`;
+
+  const filasBilletes = DENOMS_BILLETES.map(v => `
+    <div class="den-row">
+      <span class="den-lbl">Billetes de ${fmt(v)}</span>
+      <input type="number" min="0" step="1" value="0" data-bill="${v}">
+    </div>`).join('');
+
+  const filasMonedas = DENOMS_MONEDAS.map(v => `
+    <div class="den-row">
+      <span class="den-lbl">Monedas de ${fmt(v)}</span>
+      <input type="number" min="0" step="1" value="0" data-mon="${v}">
+    </div>`).join('');
+
+  document.getElementById('app').innerHTML = `
+    <div class="form-box">
+      <div class="field"><label>Sede</label>${selectorSede}</div>
+      <div class="field"><label>Fecha</label>
+        <input type="date" id="f-fecha" value="${new Date().toISOString().slice(0,10)}">
+      </div>
+
+      <div class="sec-tag">Billetes</div>
+      <div class="den-grid">${filasBilletes}</div>
+
+      <div class="sec-tag">Monedas</div>
+      <div class="den-grid">${filasMonedas}</div>
+
+      <div class="field" style="margin-top:16px"><label>Observación (opcional)</label>
+        <textarea id="f-obs" rows="2" placeholder="Ej. Faltante por vuelto no cobrado..."></textarea>
+      </div>
+
+      <div class="resumen" id="resumen"></div>
+
+      <button class="btn-save" id="btn-guardar">Guardar cuadre</button>
+      <div class="msg" id="msg"></div>
+    </div>
+  `;
+
+  document.getElementById('f-sede')?.addEventListener('change', async (e) => {
+    sedeActual = e.target.value;
+    await cargarBase(sedeActual);
+    actualizarResumen();
+  });
+
+  document.querySelectorAll('[data-bill], [data-mon]').forEach(inp => {
+    inp.addEventListener('input', actualizarResumen);
+  });
+
+  actualizarResumen();
+
+  document.getElementById('btn-guardar').addEventListener('click', guardarCuadre);
+}
+
+function leerConteo() {
+  const billetes = {};
+  let totalBilletes = 0;
+  DENOMS_BILLETES.forEach(v => {
+    const n = parseInt(document.querySelector(`[data-bill="${v}"]`).value) || 0;
+    billetes[v] = n;
+    totalBilletes += n * v;
+  });
+  const monedas = {};
+  let totalMonedas = 0;
+  DENOMS_MONEDAS.forEach(v => {
+    const n = parseInt(document.querySelector(`[data-mon="${v}"]`).value) || 0;
+    monedas[v] = n;
+    totalMonedas += n * v;
+  });
+  return { billetes, monedas, totalBilletes, totalMonedas };
+}
+
+function actualizarResumen() {
+  const { totalBilletes, totalMonedas } = leerConteo();
+  const totalEfectivo = totalBilletes + totalMonedas;
+  const diferencia = totalEfectivo - baseActual;
+  document.getElementById('resumen').innerHTML = `
+    <div class="res-row"><span>Total billetes</span><b>${fmt(totalBilletes)}</b></div>
+    <div class="res-row"><span>Total monedas</span><b>${fmt(totalMonedas)}</b></div>
+    <div class="res-row"><span>Total efectivo</span><b>${fmt(totalEfectivo)}</b></div>
+    <div class="res-row"><span>Base (${sedeActual})</span><b>${fmt(baseActual)}</b></div>
+    <div class="res-row dif${diferencia<0?' neg':''}"><span>Diferencia</span><b>${fmt(diferencia)}</b></div>
+  `;
+}
+
+async function guardarCuadre() {
+  const { billetes, monedas } = leerConteo();
+  const fecha = document.getElementById('f-fecha').value;
+  const obs = document.getElementById('f-obs').value.trim();
+
+  if (!fecha) { showMsg('⚠️ Selecciona la fecha', 'err'); return; }
+
+  const btn = document.getElementById('btn-guardar');
+  btn.disabled = true;
+  btn.textContent = 'Guardando...';
+
+  try {
+    const { error } = await sb.from('cuadre_caja').insert({
+      sede: sedeActual,
+      fecha,
+      billete_100000: billetes[100000],
+      billete_50000: billetes[50000],
+      billete_20000: billetes[20000],
+      billete_10000: billetes[10000],
+      billete_5000: billetes[5000],
+      billete_2000: billetes[2000],
+      moneda_1000: monedas[1000],
+      moneda_500: monedas[500],
+      moneda_200: monedas[200],
+      moneda_100: monedas[100],
+      base: baseActual,
+      observacion: obs || null,
+      registrado_por: userId,
+    });
+    if (error) throw error;
+
+    showMsg('✅ Cuadre guardado correctamente', 'ok');
+    setTimeout(() => { vista = 'historico'; render(); }, 1200);
+  } catch (e) {
+    showMsg('❌ ' + (e.message || 'Error al guardar'), 'err');
+    btn.disabled = false;
+    btn.textContent = 'Guardar cuadre';
+  }
+}
+
+function showMsg(txt, tipo) {
+  const el = document.getElementById('msg');
+  if (!el) return;
+  el.textContent = txt;
+  el.className = 'msg ' + tipo;
+}
+
+// ── HISTÓRICO ─────────────────────────────────────────────────────────────────
+async function renderHistorico() {
+  document.getElementById('app').innerHTML = '<div class="spin">⏳</div>';
+  if (!sedeActual) sedeActual = sedesElegibles[0];
+
+  const selectorSede = sedesElegibles.length > 1
+    ? `<select id="fil-sede">${sedesElegibles.map(s => `<option value="${s}"${s===sedeActual?' selected':''}>${s}</option>`).join('')}</select>`
+    : `<input type="text" value="${sedeActual}" disabled>`;
+
+  const { data, error } = await sb
+    .from('cuadre_caja')
+    .select('*, perfiles(nombre)')
+    .eq('sede', sedeActual)
+    .order('fecha', { ascending: false });
+
+  const cuadres = (error || !data) ? [] : data;
+
+  const rows = cuadres.length === 0
+    ? '<div class="empty">No hay cuadres registrados todavía para esta sede</div>'
+    : cuadres.map(c => {
+        const totalEfectivo = Number(c.total_billetes || 0) + Number(c.total_monedas || 0);
+        const diferencia = totalEfectivo - Number(c.base || 0);
+        const fechaS = new Date(c.fecha + 'T00:00:00').toLocaleDateString('es-CO', { day:'2-digit', month:'short', year:'numeric' });
+        return `
+        <div class="rowcard">
+          <div class="rowcard-top">
+            <div>
+              <div class="rowcard-fecha">${fechaS}</div>
+              <div class="rowcard-sede">${c.sede}</div>
+            </div>
+            <span class="dif-tag${diferencia<0?' neg':''}">${fmt(diferencia)}</span>
+          </div>
+          <div class="rowcard-vals">
+            <span>Billetes: <b>${fmt(c.total_billetes)}</b></span>
+            <span>Monedas: <b>${fmt(c.total_monedas)}</b></span>
+            <span>Total: <b>${fmt(totalEfectivo)}</b></span>
+            <span>Base: <b>${fmt(c.base)}</b></span>
+          </div>
+          ${c.observacion ? `<div class="rowcard-obs">${c.observacion}</div>` : ''}
+          <div class="rowcard-foot">Registrado por: ${c.perfiles ? c.perfiles.nombre : '—'}</div>
+        </div>`;
+      }).join('');
+
+  document.getElementById('app').innerHTML = `
+    <div class="fil-bar">${selectorSede}</div>
+    <div class="row-list">${rows}</div>
+  `;
+
+  document.getElementById('fil-sede')?.addEventListener('change', (e) => {
+    sedeActual = e.target.value;
+    renderHistorico();
+  });
+}
+
+// ── NAV ───────────────────────────────────────────────────────────────────────
+document.getElementById('btn-nuevo').addEventListener('click', () => { vista = 'nuevo'; render(); });
+document.getElementById('btn-historico').addEventListener('click', () => { vista = 'historico'; render(); });
+
+// ── INIT ──────────────────────────────────────────────────────────────────────
+(async () => {
+  const { data: { session } } = await sb.auth.getSession();
+  if (!session) { window.location.href = 'login.html'; return; }
+  userId = session.user.id;
+
+  const { data: perfil } = await sb.from('perfiles').select('*').eq('id', userId).single();
+  if (!perfil) {
+    document.getElementById('app').innerHTML = '<div class="empty">Tu usuario no tiene un perfil configurado todavía. Pídele a Carlos que te lo cree en el Panel de Accesos.</div>';
+    return;
+  }
+  miPerfil = perfil;
+  miNombre = perfil.nombre;
+  sedesElegibles = perfil.sede === 'Ambas' ? ['Chigorodó', 'Belén de Bajirá'] : [perfil.sede];
+  sedeActual = sedesElegibles[0];
+  renderColabBar();
+
+  render();
+})();
+</script>
+
+</body>
+</html>

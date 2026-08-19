@@ -1,0 +1,444 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Agrotienda Bioplanta · Solicitudes de pedido</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+:root{--v1:#33513a;--v2:#4f7c5a;--v3:#84a38c;--v4:#a9c2af;--vbg:#eaefeb;--vlt:#f4f8f5;--texto:#1a2e1a;--beige:#e6ceab;--vino:#984745}
+body{font-family:'Segoe UI',system-ui,sans-serif;background:#f0f4f0;color:var(--texto);min-height:100vh}
+.header{background:linear-gradient(135deg,var(--v1),var(--v2));color:#fff;padding:16px 20px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;box-shadow:0 2px 12px rgba(0,0,0,.2)}
+.hdr-l{display:flex;align-items:center;gap:10px}
+.logo-ico{font-size:26px}
+.brand{font-size:15px;font-weight:800}
+.brand-sub{font-size:11px;opacity:.8}
+.btn-h{background:rgba(255,255,255,.15);border:1px solid rgba(255,255,255,.3);color:#fff;padding:7px 16px;border-radius:20px;font-size:12px;cursor:pointer;font-family:inherit;text-decoration:none}
+
+.nav{max-width:1000px;margin:16px auto 0;padding:0 18px;display:flex;gap:8px;flex-wrap:wrap}
+.btn-nav{background:#fff;border:1.5px solid var(--v3);color:var(--v2);padding:9px 16px;border-radius:20px;font-size:12.5px;font-weight:700;cursor:pointer;font-family:inherit}
+.btn-nav.act{background:var(--v2);color:#fff;border-color:var(--v2)}
+
+.wrap{max-width:1000px;margin:0 auto;padding:18px 18px 60px}
+.loading{text-align:center;padding:80px;color:#888}
+
+.card{background:#fff;border-radius:16px;padding:20px;box-shadow:0 2px 10px rgba(0,0,0,.07);margin-bottom:16px}
+.card-t{font-size:14.5px;font-weight:800;color:var(--v1);margin-bottom:4px}
+.card-sub{font-size:12px;color:#777;margin-bottom:14px}
+
+.field{display:flex;flex-direction:column;gap:5px;margin-bottom:14px}
+.field label{font-size:12px;font-weight:600;color:var(--v2)}
+.field input,.field select,.field textarea{border:1.5px solid #d6e2d9;border-radius:8px;padding:9px 10px;font-size:13.5px;font-family:inherit;outline:none}
+.field textarea{resize:vertical}
+.btn-save{background:linear-gradient(135deg,var(--v1),var(--v2));color:#fff;border:none;padding:12px 22px;border-radius:10px;font-size:13.5px;font-weight:700;cursor:pointer;font-family:inherit}
+.btn-save:disabled{opacity:.6}
+.msg{margin-top:12px;padding:10px 12px;border-radius:8px;font-size:12.5px}
+.msg.err{background:#fde8e8;color:#a00}
+.msg.ok{background:#e6f4ea;color:#256d3b}
+
+.rep-card{border:1px solid var(--vbg);border-radius:12px;padding:14px 16px;margin-bottom:12px}
+.rep-top{display:flex;justify-content:space-between;align-items:flex-start;gap:10px;flex-wrap:wrap}
+.rep-prod{font-size:14px;font-weight:800;color:var(--v1)}
+.rep-meta{font-size:12px;color:#777;margin-top:2px}
+.badges{display:flex;gap:6px;flex-wrap:wrap}
+.badge{font-size:10.5px;font-weight:700;padding:3px 9px;border-radius:10px;white-space:nowrap}
+.b-sede{background:var(--vbg);color:var(--v1)}
+.b-origen{background:var(--beige);color:var(--v1)}
+.b-estado-pendiente_subir{background:var(--beige);color:var(--v1)}
+.b-estado-subido_sap{background:#e6f4ea;color:#256d3b}
+.b-estado-orden_enviada{background:var(--v1);color:#fff}
+.rep-motivo{font-size:12.5px;color:#555;margin-top:8px;line-height:1.4}
+.acciones-row{display:flex;gap:8px;margin-top:10px;flex-wrap:wrap;align-items:center}
+.btn-mini{border:none;border-radius:7px;padding:8px 12px;font-size:11.5px;cursor:pointer;font-family:inherit;font-weight:700}
+.btn-ok{background:var(--v2);color:#fff}
+.btn-ver{background:var(--v3);color:#fff;text-decoration:none}
+.mini-input{border:1.5px solid #d6e2d9;border-radius:7px;padding:7px 9px;font-size:12px;font-family:inherit;min-width:160px}
+.filtro{display:flex;gap:6px;margin-bottom:14px;flex-wrap:wrap}
+.filtro button{background:#fff;border:1.5px solid var(--v3);color:var(--v2);padding:6px 13px;border-radius:16px;font-size:11.5px;font-weight:700;cursor:pointer;font-family:inherit}
+.filtro button.act{background:var(--v2);color:#fff;border-color:var(--v2)}
+.vacio{text-align:center;padding:30px;color:#999;font-size:13px}
+.toggle-directa{background:none;border:1.5px dashed var(--v3);color:var(--v2);padding:10px 14px;border-radius:10px;font-size:12.5px;font-weight:700;cursor:pointer;font-family:inherit;width:100%;text-align:left;margin-bottom:14px}
+.form-directa{display:none;margin-bottom:16px;padding:14px;background:var(--vlt);border-radius:10px}
+.form-directa.on{display:block}
+.timeline{font-size:11.5px;color:#666;margin-top:8px;line-height:1.6}
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div class="hdr-l">
+    <div class="logo-ico">📦</div>
+    <div>
+      <div class="brand">Solicitudes de pedido</div>
+      <div class="brand-sub">De la solicitud en SAP a la orden de compra del proveedor</div>
+    </div>
+  </div>
+  <a class="btn-h" href="hub.html">← Hub</a>
+</div>
+
+<div class="nav" id="nav"></div>
+
+<div class="wrap" id="wrap">
+  <div class="loading">Cargando...</div>
+</div>
+
+<script>
+const SUPABASE_URL = 'https://fpqogvxssnoarzgxcitc.supabase.co';
+const SUPABASE_KEY = 'sb_publishable_ccZF-8tenblFEah5lXfd3w_mYTHMtMC';
+const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+let miId = null;
+let miPerfil = null;
+let puedeMarcarSubido = false;
+let puedeAceptarOrden = false;
+let puedeVerModulo = false;
+let esSuperAdmin = false;
+let vistaActual = 'historial';
+let filtroHistorial = 'todas';
+let cache = { lista: [], cotizacionesPorId: {}, perfilesPorId: {} };
+
+function fmtFecha(iso) {
+  if (!iso) return '';
+  return new Date(iso).toLocaleDateString('es-CO', { day: '2-digit', month: 'short', year: 'numeric' });
+}
+function estadoTexto(e) {
+  return { pendiente_subir: 'Pendiente de subir a SAP', subido_sap: 'Subida a SAP', orden_enviada: 'Orden enviada al proveedor' }[e] || e;
+}
+
+function renderNav() {
+  const tabs = [];
+  if (puedeMarcarSubido) tabs.push({ id: 'por-subir', label: '📋 Por subir a SAP' });
+  if (puedeAceptarOrden) tabs.push({ id: 'por-tramitar', label: '📦 Por tramitar orden de compra' });
+  tabs.push({ id: 'historial', label: '📚 Historial' });
+
+  document.getElementById('nav').innerHTML = tabs.map(t =>
+    `<button class="btn-nav ${vistaActual === t.id ? 'act' : ''}" onclick="irA('${t.id}')">${t.label}</button>`
+  ).join('');
+}
+
+function irA(vista) {
+  vistaActual = vista;
+  renderNav();
+  if (vista === 'por-subir') renderPorSubir();
+  else if (vista === 'por-tramitar') renderPorTramitar();
+  else if (vista === 'historial') renderHistorial();
+}
+
+async function cargarApoyo(lista) {
+  const cotIds = [...new Set(lista.map(s => s.cotizacion_id).filter(Boolean))];
+  if (cotIds.length) {
+    const { data } = await sb.from('cotizaciones_proveedor').select('*').in('id', cotIds);
+    (data || []).forEach(c => { cache.cotizacionesPorId[c.id] = c; });
+  }
+  if (esSuperAdmin) {
+    const { data: perfiles } = await sb.from('perfiles').select('id, nombre');
+    (perfiles || []).forEach(p => { cache.perfilesPorId[p.id] = p.nombre; });
+  }
+}
+function nombreDe(id) {
+  if (!id) return null;
+  return cache.perfilesPorId[id] || null;
+}
+
+function toggleFormDirecta() {
+  document.getElementById('form-directa').classList.toggle('on');
+}
+
+function formDirectaHtml() {
+  const sedeFija = miPerfil.sede !== 'Ambas';
+  const sedeHtml = sedeFija
+    ? `<input type="text" value="${miPerfil.sede}" disabled>`
+    : `<select id="dir-sede"><option value="Chigorodó">Chigorodó</option><option value="Belén de Bajirá">Belén de Bajirá</option></select>`;
+
+  return `
+    <button class="toggle-directa" onclick="toggleFormDirecta()">➕ Crear una solicitud directa (sin pasar por 1.2/2.2)</button>
+    <div class="form-directa" id="form-directa">
+      <div class="field"><label>Producto *</label><input type="text" id="dir-producto" placeholder="Ej: Fertilizante triple 15"></div>
+      <div class="field"><label>Cantidad</label><input type="number" id="dir-cantidad" min="0" step="1"></div>
+      <div class="field"><label>Proveedor</label><input type="text" id="dir-proveedor" placeholder="Ej: Agroinsumos del Urabá"></div>
+      <div class="field"><label>Sede destino</label>${sedeHtml}</div>
+      <div class="field"><label>Observación</label><textarea id="dir-obs" rows="2" placeholder="Motivo, referencia, etc."></textarea></div>
+      <button class="btn-save" onclick="crearDirecta()">Crear solicitud</button>
+      <div class="msg" id="msg-directa" style="display:none"></div>
+    </div>
+  `;
+}
+
+async function crearDirecta() {
+  const producto = document.getElementById('dir-producto').value.trim();
+  const cantidadVal = document.getElementById('dir-cantidad').value;
+  const proveedor = document.getElementById('dir-proveedor').value.trim();
+  const sedeSel = document.getElementById('dir-sede');
+  const sede = sedeSel ? sedeSel.value : miPerfil.sede;
+  const obs = document.getElementById('dir-obs').value.trim();
+  const msg = document.getElementById('msg-directa');
+
+  if (!producto) {
+    msg.textContent = 'El producto es obligatorio.';
+    msg.className = 'msg err'; msg.style.display = 'block';
+    return;
+  }
+
+  const { error } = await sb.from('solicitudes_pedido').insert({
+    origen: 'directa',
+    producto,
+    cantidad: cantidadVal ? parseFloat(cantidadVal) : null,
+    proveedor: proveedor || null,
+    sede_destino: sede,
+    observacion: obs || null,
+    estado: 'pendiente_subir',
+    creado_por: miId,
+  });
+
+  if (error) {
+    msg.textContent = 'No se pudo crear: ' + error.message;
+    msg.className = 'msg err'; msg.style.display = 'block';
+    return;
+  }
+
+  await renderPorSubir();
+}
+
+// ---------------------------------------------------------
+// POR SUBIR A SAP (Mostrador: Eva / Marcela)
+// ---------------------------------------------------------
+async function renderPorSubir() {
+  document.getElementById('wrap').innerHTML = '<div class="loading">Cargando...</div>';
+
+  const { data, error } = await sb.from('solicitudes_pedido').select('*').eq('estado', 'pendiente_subir').order('created_at', { ascending: true });
+  if (error) {
+    document.getElementById('wrap').innerHTML = `<div class="card"><div class="msg err" style="display:block">${error.message}</div></div>`;
+    return;
+  }
+
+  let lista = data || [];
+  if (miPerfil.sede !== 'Ambas') lista = lista.filter(s => s.sede_destino === miPerfil.sede);
+  await cargarApoyo(lista);
+
+  let html = `
+    <div class="card">
+      <div class="card-t">📋 Por subir a SAP (${lista.length})</div>
+      <div class="card-sub">Estas son las solicitudes ya autorizadas que faltan por registrar en SAP.</div>
+      ${formDirectaHtml()}
+  `;
+
+  if (!lista.length) {
+    html += '<div class="vacio">No hay solicitudes pendientes de subir a SAP.</div>';
+  } else {
+    lista.forEach(s => { html += tarjetaSolicitud(s, 'subir'); });
+  }
+
+  html += '</div>';
+  document.getElementById('wrap').innerHTML = html;
+}
+
+async function marcarSubidoSap(id) {
+  const input = document.getElementById(`np-${id}`);
+  const numeroPedido = input ? input.value.trim() : '';
+
+  const { error } = await sb.from('solicitudes_pedido').update({
+    estado: 'subido_sap',
+    subido_sap_por: miId,
+    fecha_subida_sap: new Date().toISOString(),
+    numero_pedido: numeroPedido || null,
+  }).eq('id', id);
+
+  if (error) { alert('No se pudo actualizar: ' + error.message); return; }
+  await renderPorSubir();
+}
+
+// ---------------------------------------------------------
+// POR TRAMITAR ORDEN DE COMPRA (Diego)
+// ---------------------------------------------------------
+async function renderPorTramitar() {
+  document.getElementById('wrap').innerHTML = '<div class="loading">Cargando...</div>';
+
+  const { data, error } = await sb.from('solicitudes_pedido').select('*').eq('estado', 'subido_sap').order('fecha_subida_sap', { ascending: true });
+  if (error) {
+    document.getElementById('wrap').innerHTML = `<div class="card"><div class="msg err" style="display:block">${error.message}</div></div>`;
+    return;
+  }
+
+  const lista = data || [];
+  await cargarApoyo(lista);
+
+  let html = `
+    <div class="card">
+      <div class="card-t">📦 Por tramitar orden de compra (${lista.length})</div>
+      <div class="card-sub">Ya quedaron registradas en SAP por Mostrador — acéptalas para tramitar la orden de compra con el proveedor.</div>
+      ${formDirectaHtml()}
+  `;
+
+  if (!lista.length) {
+    html += '<div class="vacio">No hay solicitudes esperando trámite de orden de compra.</div>';
+  } else {
+    lista.forEach(s => { html += tarjetaSolicitud(s, 'tramitar'); });
+  }
+
+  html += '</div>';
+  document.getElementById('wrap').innerHTML = html;
+}
+
+async function marcarOrdenEnviada(id) {
+  const input = document.getElementById(`noc-${id}`);
+  const numeroOrden = input ? input.value.trim() : '';
+
+  const { error } = await sb.from('solicitudes_pedido').update({
+    estado: 'orden_enviada',
+    aceptado_por: miId,
+    fecha_aceptacion: new Date().toISOString(),
+    numero_orden_compra: numeroOrden || null,
+  }).eq('id', id);
+
+  if (error) { alert('No se pudo actualizar: ' + error.message); return; }
+  await renderPorTramitar();
+}
+
+// ---------------------------------------------------------
+// HISTORIAL
+// ---------------------------------------------------------
+async function renderHistorial() {
+  document.getElementById('wrap').innerHTML = '<div class="loading">Cargando historial...</div>';
+
+  const { data, error } = await sb.from('solicitudes_pedido').select('*').order('created_at', { ascending: false });
+  if (error) {
+    document.getElementById('wrap').innerHTML = `<div class="card"><div class="msg err" style="display:block">${error.message}</div></div>`;
+    return;
+  }
+
+  cache.lista = data || [];
+  await cargarApoyo(cache.lista);
+  pintarHistorial();
+}
+
+function pintarHistorial() {
+  const filtros = [
+    { id: 'todas', label: 'Todas' },
+    { id: 'pendiente_subir', label: 'Pendientes de subir' },
+    { id: 'subido_sap', label: 'Subidas a SAP' },
+    { id: 'orden_enviada', label: 'Orden enviada' },
+  ];
+  const lista = filtroHistorial === 'todas' ? cache.lista : cache.lista.filter(s => s.estado === filtroHistorial);
+
+  let html = `
+    <div class="card">
+      <div class="card-t">📚 Historial (${cache.lista.length} en total)</div>
+      <div class="filtro">
+        ${filtros.map(f => `<button class="${filtroHistorial === f.id ? 'act' : ''}" onclick="cambiarFiltroHistorial('${f.id}')">${f.label}</button>`).join('')}
+      </div>
+  `;
+
+  if (!lista.length) {
+    html += '<div class="vacio">No hay solicitudes en este filtro.</div>';
+  } else {
+    lista.forEach(s => { html += tarjetaSolicitud(s, 'solo-ver'); });
+  }
+
+  html += '</div>';
+  document.getElementById('wrap').innerHTML = html;
+}
+
+function cambiarFiltroHistorial(f) {
+  filtroHistorial = f;
+  pintarHistorial();
+}
+
+function tarjetaSolicitud(s, modo) {
+  const cot = s.cotizacion_id ? cache.cotizacionesPorId[s.cotizacion_id] : null;
+  let acciones = '';
+
+  if (modo === 'subir') {
+    acciones = `
+      <div class="acciones-row">
+        <input class="mini-input" id="np-${s.id}" placeholder="N.º de pedido en SAP (opcional)">
+        <button class="btn-mini btn-ok" onclick="marcarSubidoSap('${s.id}')">✅ Ya la subí a SAP</button>
+      </div>
+    `;
+  } else if (modo === 'tramitar') {
+    acciones = `
+      <div class="acciones-row">
+        <input class="mini-input" id="noc-${s.id}" placeholder="N.º de orden de compra (opcional)">
+        <button class="btn-mini btn-ok" onclick="marcarOrdenEnviada('${s.id}')">✅ Aceptar y tramitar orden de compra</button>
+      </div>
+    `;
+  }
+
+  let timeline = '';
+  if (modo === 'solo-ver') {
+    const partes = [`Creada: ${fmtFecha(s.created_at)}`];
+    if (s.fecha_subida_sap) partes.push(`Subida a SAP: ${fmtFecha(s.fecha_subida_sap)}${nombreDe(s.subido_sap_por) ? ' por ' + nombreDe(s.subido_sap_por) : ''}${s.numero_pedido ? ' (pedido ' + s.numero_pedido + ')' : ''}`);
+    if (s.fecha_aceptacion) partes.push(`Orden enviada: ${fmtFecha(s.fecha_aceptacion)}${nombreDe(s.aceptado_por) ? ' por ' + nombreDe(s.aceptado_por) : ''}${s.numero_orden_compra ? ' (orden ' + s.numero_orden_compra + ')' : ''}`);
+    timeline = `<div class="timeline">${partes.join(' · ')}</div>`;
+  }
+
+  return `
+    <div class="rep-card">
+      <div class="rep-top">
+        <div>
+          <div class="rep-prod">${s.producto}${s.cantidad ? ' · ' + s.cantidad : ''}</div>
+          <div class="rep-meta">${s.proveedor ? s.proveedor + ' · ' : ''}${fmtFecha(s.created_at)}</div>
+        </div>
+        <div class="badges">
+          <span class="badge b-sede">${s.sede_destino || 'Ambas'}</span>
+          <span class="badge b-origen">${s.origen === 'directa' ? 'Directa' : 'Desde 1.2/2.2'}</span>
+          <span class="badge b-estado-${s.estado}">${estadoTexto(s.estado)}</span>
+        </div>
+      </div>
+      ${s.observacion ? `<div class="rep-motivo">${s.observacion}</div>` : ''}
+      ${cot ? `<div class="rep-motivo"><a href="${cot.archivo_url}" target="_blank" class="btn-mini btn-ver" style="text-decoration:none;display:inline-block">📎 Ver cotización</a></div>` : ''}
+      ${timeline}
+      ${acciones}
+    </div>
+  `;
+}
+
+// ---------------------------------------------------------
+// INIT
+// ---------------------------------------------------------
+(async () => {
+  const { data: { session } } = await sb.auth.getSession();
+  if (!session) { window.location.href = 'login.html'; return; }
+  miId = session.user.id;
+
+  const [{ data: perfil }, { data: permisos }] = await Promise.all([
+    sb.from('perfiles').select('*').eq('id', miId).single(),
+    sb.from('permisos_modulo').select('*').eq('perfil_id', miId),
+  ]);
+
+  if (!perfil) {
+    document.getElementById('wrap').innerHTML = '<div class="card">Tu usuario no tiene un perfil configurado todavía.</div>';
+    return;
+  }
+  miPerfil = perfil;
+  esSuperAdmin = perfil.es_super_admin;
+
+  const p1 = (permisos || []).find(p => p.modulo === 1);
+  const p2 = (permisos || []).find(p => p.modulo === 2);
+  const p3 = (permisos || []).find(p => p.modulo === 3);
+  const nivel1 = p1 ? p1.nivel : 'inactivo';
+  const nivel2 = p2 ? p2.nivel : 'inactivo';
+  const nivel3 = p3 ? p3.nivel : 'inactivo';
+  const subs1 = (p1 && p1.submodulos_parciales) || [];
+
+  const cargo = (perfil.cargo || '').toLowerCase();
+  // Carlos (Super Admin) también ve ambas pestañas de acción, además del
+  // Historial, para poder probar el módulo completo sin depender de que
+  // Eva, Marcela o Diego inicien sesión primero.
+  puedeMarcarSubido = esSuperAdmin || cargo.includes('mostrador');
+  puedeAceptarOrden = esSuperAdmin || cargo.includes('almacén') || cargo.includes('almacen');
+  puedeVerModulo = esSuperAdmin || nivel1 === 'completo' || (nivel1 === 'parcial' && subs1.includes('1.7')) || nivel2 !== 'inactivo' || nivel3 !== 'inactivo';
+
+  if (!puedeVerModulo) {
+    document.getElementById('wrap').innerHTML = '<div class="card">No tienes permiso para ver este módulo.</div>';
+    return;
+  }
+
+  vistaActual = puedeMarcarSubido ? 'por-subir' : (puedeAceptarOrden ? 'por-tramitar' : 'historial');
+  renderNav();
+  irA(vistaActual);
+})();
+</script>
+
+</body>
+</html>

@@ -37,6 +37,7 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:#f0f4f0;color:var(--
 .sub-item{display:flex;justify-content:space-between;align-items:center;font-size:12.5px;padding:7px 10px;border-radius:8px;background:var(--vlt);color:var(--v2);text-decoration:none}
 .sub-item.pronto{background:#f4f4f4;color:#999;cursor:default}
 .sub-badge{font-size:9px;background:#eee;color:#999;padding:2px 7px;border-radius:8px}
+.badge-count{font-size:10px;font-weight:800;background:var(--vino);color:#fff;padding:1px 7px;border-radius:10px}
 
 .loading{text-align:center;padding:80px;color:#888}
 </style>
@@ -113,7 +114,7 @@ function renderGrupo(numero, nivel, esSuperAdmin) {
   const nivelMostrado = esSuperAdmin ? 'completo' : nivel;
   const itemsHtml = g.items.map(it => {
     if (it.listo && activo) {
-      return `<a class="sub-item" href="${it.href}"><span>${it.id} ${it.nombre}</span></a>`;
+      return `<a class="sub-item" href="${it.href}"><span>${it.id} ${it.nombre}</span><span class="badge-count" data-badge="${it.id}" style="display:none"></span></a>`;
     }
     return `<div class="sub-item pronto"><span>${it.id} ${it.nombre}</span><span class="sub-badge">Próximamente</span></div>`;
   }).join('');
@@ -141,6 +142,63 @@ function renderPublico(icono, nombre, href, desc) {
       <div class="sub-list"><div class="sub-item"><span>${desc}</span></div></div>
     </a>
   `;
+}
+
+function pintarBadge(id, count) {
+  if (!count) return;
+  const el = document.querySelector(`[data-badge="${id}"]`);
+  if (!el) return;
+  el.textContent = count > 99 ? '99+' : String(count);
+  el.style.display = 'inline-block';
+}
+
+// Contadores de pendientes por módulo — se calculan aparte y se pintan
+// encima de la pantalla ya cargada, para no retrasar el Hub si alguna
+// consulta falla o tarda.
+async function cargarBadges(userId, perfil, nivel2) {
+  const esSuperAdmin = perfil.es_super_admin;
+  const cargo = (perfil.cargo || '').toLowerCase();
+  const esMostrador = cargo.includes('mostrador');
+  const esAlmacen = cargo.includes('almacén') || cargo.includes('almacen');
+  const miSede = perfil.sede;
+
+  // 1.4 / 2.5 Tablero de tareas: cuántas tengo asignadas sin completar
+  try {
+    const { count } = await sb.from('tarea_asignados').select('id', { count: 'exact', head: true })
+      .eq('perfil_id', userId).neq('estado_individual', 'completada');
+    pintarBadge('1.4', count);
+  } catch (e) { /* si falla la consulta, simplemente no se muestra el número */ }
+
+  // 2.2 Sugerido de compras: reportes pendientes de autorizar
+  if (esSuperAdmin || (nivel2 && nivel2 !== 'inactivo')) {
+    try {
+      const { count } = await sb.from('reportes_compra').select('id', { count: 'exact', head: true }).eq('estado', 'pendiente');
+      pintarBadge('2.2', count);
+    } catch (e) {}
+  }
+
+  // 1.7 Solicitudes de pedido: pendientes según el rol de quien mira
+  try {
+    let total = 0;
+    if (esSuperAdmin) {
+      const [{ count: c1 }, { count: c2 }] = await Promise.all([
+        sb.from('solicitudes_pedido').select('id', { count: 'exact', head: true }).eq('estado', 'pendiente_subir'),
+        sb.from('solicitudes_pedido').select('id', { count: 'exact', head: true }).eq('estado', 'subido_sap'),
+      ]);
+      total = (c1 || 0) + (c2 || 0);
+    } else if (esMostrador) {
+      let q = sb.from('solicitudes_pedido').select('id', { count: 'exact', head: true }).eq('estado', 'pendiente_subir');
+      if (miSede !== 'Ambas') q = q.eq('sede', miSede);
+      const { count } = await q;
+      total = count || 0;
+    } else if (esAlmacen) {
+      let q = sb.from('solicitudes_pedido').select('id', { count: 'exact', head: true }).eq('estado', 'subido_sap');
+      if (miSede !== 'Ambas') q = q.eq('sede', miSede);
+      const { count } = await q;
+      total = count || 0;
+    }
+    pintarBadge('1.7', total);
+  } catch (e) {}
 }
 
 async function salir() {
@@ -182,6 +240,8 @@ async function salir() {
   html += '</div>';
 
   document.getElementById('wrap').innerHTML = html;
+
+  cargarBadges(userId, perfil, nivel2);
 })();
 </script>
 

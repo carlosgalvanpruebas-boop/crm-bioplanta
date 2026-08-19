@@ -209,14 +209,14 @@ async function renderSorteo() {
         <div class="sorteo-top">
           <div>
             <div class="sorteo-grupo">${grupo.nombre}</div>
-            <div class="sorteo-meta">${s.sede} · Responsable: ${grupo.responsable_area} de esta sede ${esMio ? '— <b>te toca a ti esta semana</b>' : ''}</div>
+            <div class="sorteo-meta">${s.sede} · Le corresponde a: ${grupo.responsable_area} de esta sede ${esMio ? '— <b>te toca a ti esta semana</b>' : '(en consulta — el conteo lo hace esa persona, no tú)'}</div>
           </div>
           <span class="badge b-${s.estado}">${estadoTexto(s.estado)}</span>
         </div>
-        ${esMio || puedeGenerar ? `
+        ${esMio ? `
           <div style="margin-top:12px">
             ${s.estado !== 'completado' ? `<button class="btn-mini" onclick="abrirConteo('${s.id}')">📝 Registrar conteo</button>` : ''}
-            ${(esMio || puedeGenerar) && s.estado !== 'completado' ? `<button class="btn-mini sec" onclick="marcarCompletado('${s.id}')">✅ Marcar como completado</button>` : ''}
+            ${s.estado !== 'completado' ? `<button class="btn-mini sec" onclick="marcarCompletado('${s.id}')">✅ Marcar como completado</button>` : ''}
           </div>
           <div id="conteo-${s.id}"></div>
         ` : ''}

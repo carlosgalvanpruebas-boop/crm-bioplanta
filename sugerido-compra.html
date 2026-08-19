@@ -1,0 +1,505 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Agrotienda Bioplanta · Sugerido de compra</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+:root{--v1:#33513a;--v2:#4f7c5a;--v3:#84a38c;--v4:#a9c2af;--vbg:#eaefeb;--vlt:#f4f8f5;--texto:#1a2e1a;--beige:#e6ceab;--vino:#984745}
+body{font-family:'Segoe UI',system-ui,sans-serif;background:#f0f4f0;color:var(--texto);min-height:100vh}
+.header{background:linear-gradient(135deg,var(--v1),var(--v2));color:#fff;padding:16px 20px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;box-shadow:0 2px 12px rgba(0,0,0,.2)}
+.hdr-l{display:flex;align-items:center;gap:10px}
+.logo-ico{font-size:26px}
+.brand{font-size:15px;font-weight:800}
+.brand-sub{font-size:11px;opacity:.8}
+.btn-h{background:rgba(255,255,255,.15);border:1px solid rgba(255,255,255,.3);color:#fff;padding:7px 16px;border-radius:20px;font-size:12px;cursor:pointer;font-family:inherit;text-decoration:none}
+
+.nav{max-width:1000px;margin:16px auto 0;padding:0 18px;display:flex;gap:8px;flex-wrap:wrap}
+.btn-nav{background:#fff;border:1.5px solid var(--v3);color:var(--v2);padding:9px 16px;border-radius:20px;font-size:12.5px;font-weight:700;cursor:pointer;font-family:inherit}
+.btn-nav.act{background:var(--v2);color:#fff;border-color:var(--v2)}
+
+.wrap{max-width:1000px;margin:0 auto;padding:18px 18px 60px}
+.loading{text-align:center;padding:80px;color:#888}
+
+.card{background:#fff;border-radius:16px;padding:20px;box-shadow:0 2px 10px rgba(0,0,0,.07);margin-bottom:16px}
+.card-t{font-size:14.5px;font-weight:800;color:var(--v1);margin-bottom:4px}
+.card-sub{font-size:12px;color:#777;margin-bottom:14px}
+
+.field{display:flex;flex-direction:column;gap:5px;margin-bottom:14px}
+.field label{font-size:12px;font-weight:600;color:var(--v2)}
+.field input,.field select,.field textarea{border:1.5px solid #d6e2d9;border-radius:8px;padding:9px 10px;font-size:13.5px;font-family:inherit;outline:none}
+.field textarea{resize:vertical}
+.btn-save{background:linear-gradient(135deg,var(--v1),var(--v2));color:#fff;border:none;padding:12px 22px;border-radius:10px;font-size:13.5px;font-weight:700;cursor:pointer;font-family:inherit}
+.btn-save:disabled{opacity:.6}
+.msg{margin-top:12px;padding:10px 12px;border-radius:8px;font-size:12.5px}
+.msg.err{background:#fde8e8;color:#a00}
+.msg.ok{background:#e6f4ea;color:#256d3b}
+
+.rep-card{border:1px solid var(--vbg);border-radius:12px;padding:14px 16px;margin-bottom:12px}
+.rep-top{display:flex;justify-content:space-between;align-items:flex-start;gap:10px;flex-wrap:wrap}
+.rep-prod{font-size:14px;font-weight:800;color:var(--v1)}
+.rep-meta{font-size:12px;color:#777;margin-top:2px}
+.badges{display:flex;gap:6px;flex-wrap:wrap}
+.badge{font-size:10.5px;font-weight:700;padding:3px 9px;border-radius:10px;white-space:nowrap}
+.b-sede{background:var(--vbg);color:var(--v1)}
+.b-urg-normal{background:var(--beige);color:var(--v1)}
+.b-urg-alta{background:#fde3e2;color:var(--vino)}
+.b-estado-pendiente{background:var(--beige);color:var(--v1)}
+.b-estado-autorizado{background:#e6f4ea;color:#256d3b}
+.b-estado-rechazado{background:#fde3e2;color:var(--vino)}
+.b-estado-subido_sap{background:var(--v1);color:#fff}
+.rep-motivo{font-size:12.5px;color:#555;margin-top:8px;line-height:1.4}
+
+.panel-auth{margin-top:12px;background:var(--vlt);border-radius:10px;padding:12px 14px}
+.cot-item{display:flex;justify-content:space-between;align-items:center;gap:8px;font-size:12px;padding:6px 0;border-bottom:1px solid #e2ece4}
+.cot-item:last-child{border-bottom:none}
+.cot-radio{display:flex;align-items:center;gap:6px}
+.vincular-row{display:flex;gap:8px;margin-top:10px;flex-wrap:wrap}
+.vincular-row select{flex:1;min-width:200px;border:1.5px solid #d6e2d9;border-radius:8px;padding:8px 9px;font-size:12.5px;font-family:inherit}
+.btn-mini{border:none;border-radius:7px;padding:8px 12px;font-size:11.5px;cursor:pointer;font-family:inherit;font-weight:700}
+.btn-vincular{background:var(--v3);color:#fff}
+.btn-autorizar{background:var(--v2);color:#fff}
+.btn-rechazar{background:#fde3e2;color:var(--vino)}
+.acciones-row{display:flex;gap:8px;margin-top:10px;flex-wrap:wrap}
+.nota-obs{font-size:11.5px;color:#888;margin-top:8px;font-style:italic}
+.filtro-bandeja{display:flex;gap:6px;margin-bottom:14px;flex-wrap:wrap}
+.filtro-bandeja button{background:#fff;border:1.5px solid var(--v3);color:var(--v2);padding:6px 13px;border-radius:16px;font-size:11.5px;font-weight:700;cursor:pointer;font-family:inherit}
+.filtro-bandeja button.act{background:var(--v2);color:#fff;border-color:var(--v2)}
+.vacio{text-align:center;padding:30px;color:#999;font-size:13px}
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div class="hdr-l">
+    <div class="logo-ico">🛒</div>
+    <div>
+      <div class="brand">Sugerido de compra</div>
+      <div class="brand-sub">Reporte de oportunidades y autorización de compras</div>
+    </div>
+  </div>
+  <a class="btn-h" href="hub.html">← Hub</a>
+</div>
+
+<div class="nav" id="nav"></div>
+
+<div class="wrap" id="wrap">
+  <div class="loading">Cargando...</div>
+</div>
+
+<script>
+const SUPABASE_URL = 'https://fpqogvxssnoarzgxcitc.supabase.co';
+const SUPABASE_KEY = 'sb_publishable_ccZF-8tenblFEah5lXfd3w_mYTHMtMC';
+const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+let miId = null;
+let miPerfil = null;
+let puedeReportar = false;
+let puedeVerBandeja = false;
+let esSuperAdmin = false;
+let vistaActual = 'reportar';
+let filtroBandeja = 'pendiente';
+let cache = { misReportes: [], bandeja: [], cotizaciones: {} };
+
+function fmtFecha(iso) {
+  if (!iso) return '';
+  return new Date(iso).toLocaleDateString('es-CO', { day: '2-digit', month: 'short', year: 'numeric' });
+}
+function fmtCOP(v) {
+  if (v === null || v === undefined) return '—';
+  return '$' + Number(v).toLocaleString('es-CO');
+}
+function estadoTexto(e) {
+  return { pendiente: 'Pendiente', autorizado: 'Autorizado', rechazado: 'Rechazado', subido_sap: 'Subido a SAP' }[e] || e;
+}
+
+function renderNav() {
+  const tabs = [];
+  if (puedeReportar) tabs.push({ id: 'reportar', label: '📝 Reportar oportunidad' });
+  tabs.push({ id: 'mis-reportes', label: '📋 Mis reportes' });
+  if (puedeVerBandeja) tabs.push({ id: 'bandeja', label: '📥 Bandeja de autorización' });
+
+  document.getElementById('nav').innerHTML = tabs.map(t =>
+    `<button class="btn-nav ${vistaActual === t.id ? 'act' : ''}" onclick="irA('${t.id}')">${t.label}</button>`
+  ).join('');
+}
+
+function irA(vista) {
+  vistaActual = vista;
+  renderNav();
+  if (vista === 'reportar') renderReportar();
+  else if (vista === 'mis-reportes') renderMisReportes();
+  else if (vista === 'bandeja') renderBandeja();
+}
+
+function origenDeCargo(cargo) {
+  return (cargo || '').toLowerCase().includes('bodega') ? 'bodega' : 'mostrador';
+}
+
+// ---------------------------------------------------------
+// REPORTAR OPORTUNIDAD
+// ---------------------------------------------------------
+function renderReportar() {
+  const sedeFija = miPerfil.sede !== 'Ambas';
+  const sedeHtml = sedeFija
+    ? `<input type="text" value="${miPerfil.sede}" disabled>`
+    : `<select id="rep-sede"><option value="Chigorodó">Chigorodó</option><option value="Belén de Bajirá">Belén de Bajirá</option></select>`;
+
+  document.getElementById('wrap').innerHTML = `
+    <div class="card">
+      <div class="card-t">📝 Reportar una oportunidad de compra</div>
+      <div class="card-sub">Este reporte lo revisa Carlos para autorizar la compra — no sube nada directamente a SAP.</div>
+      <div class="field"><label>Producto *</label><input type="text" id="rep-producto" placeholder="Ej: Fertilizante triple 15"></div>
+      <div class="field"><label>Cantidad</label><input type="number" id="rep-cantidad" min="0" step="1" placeholder="Ej: 20"></div>
+      <div class="field"><label>Motivo</label><textarea id="rep-motivo" rows="2" placeholder="Ej: se está agotando, varios clientes lo han pedido esta semana"></textarea></div>
+      <div class="field"><label>Urgencia</label><select id="rep-urgencia"><option value="Normal">Normal</option><option value="Alta">Alta</option></select></div>
+      <div class="field"><label>Sede</label>${sedeHtml}</div>
+      <button class="btn-save" id="btn-reportar">Enviar reporte</button>
+      <div class="msg" id="msg-reportar" style="display:none"></div>
+    </div>
+  `;
+
+  document.getElementById('btn-reportar').addEventListener('click', async () => {
+    const producto = document.getElementById('rep-producto').value.trim();
+    const cantidadVal = document.getElementById('rep-cantidad').value;
+    const motivo = document.getElementById('rep-motivo').value.trim();
+    const urgencia = document.getElementById('rep-urgencia').value;
+    const sede = sedeFija ? miPerfil.sede : document.getElementById('rep-sede').value;
+    const msg = document.getElementById('msg-reportar');
+    msg.style.display = 'none';
+
+    if (!producto) {
+      msg.textContent = 'El producto es obligatorio.';
+      msg.className = 'msg err'; msg.style.display = 'block';
+      return;
+    }
+
+    const btn = document.getElementById('btn-reportar');
+    btn.disabled = true; btn.textContent = 'Enviando...';
+
+    const { error } = await sb.from('reportes_compra').insert({
+      sede,
+      producto,
+      cantidad: cantidadVal ? parseFloat(cantidadVal) : null,
+      motivo: motivo || null,
+      urgencia,
+      origen: origenDeCargo(miPerfil.cargo),
+      reportado_por: miId,
+      estado: 'pendiente',
+    });
+
+    btn.disabled = false; btn.textContent = 'Enviar reporte';
+
+    if (error) {
+      msg.textContent = 'No se pudo enviar: ' + error.message;
+      msg.className = 'msg err'; msg.style.display = 'block';
+      return;
+    }
+
+    msg.textContent = '✅ ¡Reporte enviado! Carlos lo revisará para autorizar la compra.';
+    msg.className = 'msg ok'; msg.style.display = 'block';
+    document.getElementById('rep-producto').value = '';
+    document.getElementById('rep-cantidad').value = '';
+    document.getElementById('rep-motivo').value = '';
+  });
+}
+
+// ---------------------------------------------------------
+// MIS REPORTES
+// ---------------------------------------------------------
+async function renderMisReportes() {
+  document.getElementById('wrap').innerHTML = '<div class="loading">Cargando reportes...</div>';
+
+  const { data, error } = await sb.from('reportes_compra').select('*').order('created_at', { ascending: false });
+  cache.misReportes = data || [];
+
+  if (error) {
+    document.getElementById('wrap').innerHTML = `<div class="card"><div class="msg err" style="display:block">No se pudieron cargar los reportes: ${error.message}</div></div>`;
+    return;
+  }
+
+  if (!cache.misReportes.length) {
+    document.getElementById('wrap').innerHTML = `<div class="card"><div class="vacio">Todavía no hay reportes de compra en tu sede.</div></div>`;
+    return;
+  }
+
+  document.getElementById('wrap').innerHTML = `
+    <div class="card">
+      <div class="card-t">📋 Reportes de tu sede (${cache.misReportes.length})</div>
+      <div class="card-sub">Incluye los tuyos y los de tus compañeros de la misma sede.</div>
+      ${cache.misReportes.map(r => `
+        <div class="rep-card">
+          <div class="rep-top">
+            <div>
+              <div class="rep-prod">${r.producto}${r.cantidad ? ' · ' + r.cantidad : ''}</div>
+              <div class="rep-meta">${fmtFecha(r.created_at)}</div>
+            </div>
+            <div class="badges">
+              <span class="badge b-sede">${r.sede}</span>
+              <span class="badge b-urg-${r.urgencia.toLowerCase()}">${r.urgencia}</span>
+              <span class="badge b-estado-${r.estado}">${estadoTexto(r.estado)}</span>
+            </div>
+          </div>
+          ${r.motivo ? `<div class="rep-motivo">${r.motivo}</div>` : ''}
+          ${r.justificacion && r.estado !== 'pendiente' ? `<div class="rep-motivo"><b>Nota de Carlos:</b> ${r.justificacion}</div>` : ''}
+        </div>
+      `).join('')}
+    </div>
+  `;
+}
+
+// ---------------------------------------------------------
+// BANDEJA DE AUTORIZACIÓN
+// ---------------------------------------------------------
+async function renderBandeja() {
+  document.getElementById('wrap').innerHTML = '<div class="loading">Cargando bandeja...</div>';
+
+  const { data, error } = await sb.from('reportes_compra').select('*').order('created_at', { ascending: false });
+  if (error) {
+    document.getElementById('wrap').innerHTML = `<div class="card"><div class="msg err" style="display:block">No se pudo cargar: ${error.message}</div></div>`;
+    return;
+  }
+  cache.bandeja = data || [];
+
+  const { data: todasCotizaciones } = await sb.from('cotizaciones_proveedor').select('*');
+  const cotPorReporte = {};
+  const cotSinVincular = [];
+  (todasCotizaciones || []).forEach(c => {
+    if (c.reporte_compra_id) {
+      if (!cotPorReporte[c.reporte_compra_id]) cotPorReporte[c.reporte_compra_id] = [];
+      cotPorReporte[c.reporte_compra_id].push(c);
+    } else if (c.estado === 'disponible') {
+      cotSinVincular.push(c);
+    }
+  });
+  cache.cotizaciones = { porReporte: cotPorReporte, sinVincular: cotSinVincular };
+
+  pintarBandeja();
+}
+
+function pintarBandeja() {
+  const lista = filtroBandeja === 'todas' ? cache.bandeja : cache.bandeja.filter(r => r.estado === filtroBandeja);
+  const filtros = [
+    { id: 'pendiente', label: 'Pendientes' },
+    { id: 'autorizado', label: 'Autorizadas' },
+    { id: 'rechazado', label: 'Rechazadas' },
+    { id: 'subido_sap', label: 'Subidas a SAP' },
+    { id: 'todas', label: 'Todas' },
+  ];
+
+  let html = `
+    <div class="card">
+      <div class="card-t">📥 Bandeja de autorización (${cache.bandeja.length} en total)</div>
+      <div class="card-sub">${esSuperAdmin ? 'Autoriza o rechaza cada solicitud, vinculando la cotización de respaldo.' : 'Modo de observación: puedes ver el estado de cada solicitud, pero solo Carlos autoriza o rechaza.'}</div>
+      <div class="filtro-bandeja">
+        ${filtros.map(f => `<button class="${filtroBandeja === f.id ? 'act' : ''}" onclick="cambiarFiltroBandeja('${f.id}')">${f.label}</button>`).join('')}
+      </div>
+  `;
+
+  if (!lista.length) {
+    html += `<div class="vacio">No hay solicitudes en este filtro.</div>`;
+  } else {
+    lista.forEach(r => {
+      const cots = cache.cotizaciones.porReporte[r.id] || [];
+      html += `
+        <div class="rep-card" data-reporte="${r.id}">
+          <div class="rep-top">
+            <div>
+              <div class="rep-prod">${r.producto}${r.cantidad ? ' · ' + r.cantidad : ''}</div>
+              <div class="rep-meta">${fmtFecha(r.created_at)} · origen: ${r.origen}</div>
+            </div>
+            <div class="badges">
+              <span class="badge b-sede">${r.sede}</span>
+              <span class="badge b-urg-${r.urgencia.toLowerCase()}">${r.urgencia}</span>
+              <span class="badge b-estado-${r.estado}">${estadoTexto(r.estado)}</span>
+            </div>
+          </div>
+          ${r.motivo ? `<div class="rep-motivo"><b>Motivo:</b> ${r.motivo}</div>` : ''}
+          ${r.justificacion ? `<div class="rep-motivo"><b>Justificación:</b> ${r.justificacion}</div>` : ''}
+          ${renderPanelCotizaciones(r, cots)}
+        </div>
+      `;
+    });
+  }
+
+  html += '</div>';
+  document.getElementById('wrap').innerHTML = html;
+}
+
+function renderPanelCotizaciones(reporte, cots) {
+  const soloLectura = !esSuperAdmin || reporte.estado !== 'pendiente';
+
+  let html = `<div class="panel-auth">`;
+  html += `<div style="font-size:12px;font-weight:700;color:var(--v1);margin-bottom:6px">Cotizaciones vinculadas (${cots.length})</div>`;
+
+  if (!cots.length) {
+    html += `<div style="font-size:11.5px;color:#999">Todavía no hay ninguna cotización vinculada a esta solicitud.</div>`;
+  } else {
+    cots.forEach(c => {
+      const marcada = c.seleccionada ? ' ⭐' : '';
+      html += `
+        <div class="cot-item">
+          <div class="cot-radio">
+            ${!soloLectura && cots.length > 1 ? `<input type="radio" name="sel-${reporte.id}" value="${c.id}" ${c.seleccionada ? 'checked' : ''}>` : ''}
+            <span>${c.proveedor_nombre} — ${c.producto_servicio} — ${fmtCOP(c.valor_cotizado)}${marcada}</span>
+          </div>
+        </div>
+      `;
+    });
+  }
+
+  if (!soloLectura) {
+    const disponibles = cache.cotizaciones.sinVincular.filter(c => !cots.some(x => x.id === c.id));
+    html += `
+      <div class="vincular-row">
+        <select id="sel-vincular-${reporte.id}">
+          <option value="">— elige una cotización disponible —</option>
+          ${disponibles.map(c => `<option value="${c.id}">${c.proveedor_nombre} — ${c.producto_servicio} — ${fmtCOP(c.valor_cotizado)}</option>`).join('')}
+        </select>
+        <button class="btn-mini btn-vincular" onclick="vincularCotizacion('${reporte.id}')">🔗 Vincular</button>
+      </div>
+      <div class="field" style="margin-top:10px">
+        <label>Justificación${cots.length > 1 ? ' (obligatoria si hay más de una cotización)' : ' (opcional)'}</label>
+        <textarea id="just-${reporte.id}" rows="2" placeholder="Ej: se eligió por mejor tiempo de entrega, aunque no era la más barata">${reporte.justificacion || ''}</textarea>
+      </div>
+      <div class="acciones-row">
+        <button class="btn-mini btn-autorizar" ${!cots.length ? 'disabled' : ''} onclick="autorizarReporte('${reporte.id}')">✅ Autorizar</button>
+        <button class="btn-mini btn-rechazar" onclick="rechazarReporte('${reporte.id}')">❌ Rechazar</button>
+      </div>
+      <div class="nota-obs">El botón "Autorizar" se activa solo cuando hay al menos una cotización vinculada.</div>
+    `;
+  } else if (reporte.estado === 'pendiente' && !esSuperAdmin) {
+    html += `<div class="nota-obs">Solo Carlos puede autorizar o rechazar esta solicitud.</div>`;
+  }
+
+  html += `</div>`;
+  return html;
+}
+
+function cambiarFiltroBandeja(f) {
+  filtroBandeja = f;
+  pintarBandeja();
+}
+
+async function vincularCotizacion(reporteId) {
+  const sel = document.getElementById(`sel-vincular-${reporteId}`);
+  const cotId = sel.value;
+  if (!cotId) { alert('Elige una cotización primero.'); return; }
+
+  const { error } = await sb.from('cotizaciones_proveedor').update({ reporte_compra_id: reporteId }).eq('id', cotId);
+  if (error) { alert('No se pudo vincular: ' + error.message); return; }
+
+  await renderBandeja();
+}
+
+async function autorizarReporte(reporteId) {
+  const reporte = cache.bandeja.find(r => r.id === reporteId);
+  const cots = cache.cotizaciones.porReporte[reporteId] || [];
+  if (!cots.length) { alert('Vincula al menos una cotización antes de autorizar.'); return; }
+
+  let seleccionadaId = cots[0].id;
+  if (cots.length > 1) {
+    const radio = document.querySelector(`input[name="sel-${reporteId}"]:checked`);
+    if (!radio) { alert('Elige cuál cotización fue la seleccionada.'); return; }
+    seleccionadaId = radio.value;
+  }
+
+  const justificacionEl = document.getElementById(`just-${reporteId}`);
+  const justificacion = justificacionEl ? justificacionEl.value.trim() : '';
+  if (cots.length > 1 && !justificacion) {
+    alert('Con más de una cotización, la justificación es obligatoria.');
+    return;
+  }
+
+  const elegida = cots.find(c => c.id === seleccionadaId);
+  const otras = cots.filter(c => c.id !== seleccionadaId);
+  let ahorroPct = null;
+  if (otras.length && elegida.valor_cotizado != null) {
+    const validas = otras.map(c => c.valor_cotizado).filter(v => v != null);
+    if (validas.length) {
+      const mejorOtra = Math.min(...validas);
+      if (mejorOtra > 0) ahorroPct = Math.round(((mejorOtra - elegida.valor_cotizado) / mejorOtra) * 1000) / 10;
+    }
+  }
+
+  const { data: { session } } = await sb.auth.getSession();
+
+  await Promise.all([
+    sb.from('cotizaciones_proveedor').update({
+      seleccionada: true,
+      justificacion_seleccion: justificacion || null,
+      ahorro_pct: ahorroPct,
+    }).eq('id', seleccionadaId),
+    ...otras.map(c => sb.from('cotizaciones_proveedor').update({ seleccionada: false }).eq('id', c.id)),
+    sb.from('reportes_compra').update({
+      estado: 'autorizado',
+      autorizado_por: session.user.id,
+      fecha_autorizacion: new Date().toISOString(),
+      justificacion: justificacion || null,
+    }).eq('id', reporteId),
+  ]);
+
+  await renderBandeja();
+}
+
+async function rechazarReporte(reporteId) {
+  if (!confirm('¿Seguro que quieres rechazar esta solicitud de compra?')) return;
+
+  const justificacionEl = document.getElementById(`just-${reporteId}`);
+  const justificacion = justificacionEl ? justificacionEl.value.trim() : '';
+  const { data: { session } } = await sb.auth.getSession();
+
+  await sb.from('reportes_compra').update({
+    estado: 'rechazado',
+    autorizado_por: session.user.id,
+    fecha_autorizacion: new Date().toISOString(),
+    justificacion: justificacion || null,
+  }).eq('id', reporteId);
+
+  await renderBandeja();
+}
+
+// ---------------------------------------------------------
+// INIT
+// ---------------------------------------------------------
+(async () => {
+  const { data: { session } } = await sb.auth.getSession();
+  if (!session) { window.location.href = 'login.html'; return; }
+  miId = session.user.id;
+
+  const [{ data: perfil }, { data: permisos }] = await Promise.all([
+    sb.from('perfiles').select('*').eq('id', miId).single(),
+    sb.from('permisos_modulo').select('*').eq('perfil_id', miId),
+  ]);
+
+  if (!perfil) {
+    document.getElementById('wrap').innerHTML = '<div class="card">Tu usuario no tiene un perfil configurado todavía.</div>';
+    return;
+  }
+  miPerfil = perfil;
+  esSuperAdmin = perfil.es_super_admin;
+
+  const p1 = (permisos || []).find(p => p.modulo === 1);
+  const p2 = (permisos || []).find(p => p.modulo === 2);
+  const nivel1 = p1 ? p1.nivel : 'inactivo';
+  const nivel2 = p2 ? p2.nivel : 'inactivo';
+  const subs1 = (p1 && p1.submodulos_parciales) || [];
+
+  puedeReportar = esSuperAdmin || nivel1 === 'completo' || (nivel1 === 'parcial' && subs1.includes('1.2'));
+  puedeVerBandeja = esSuperAdmin || nivel2 !== 'inactivo';
+
+  if (!puedeReportar && !puedeVerBandeja) {
+    document.getElementById('wrap').innerHTML = '<div class="card">No tienes permiso para ver este módulo.</div>';
+    return;
+  }
+
+  vistaActual = puedeVerBandeja ? 'bandeja' : (puedeReportar ? 'reportar' : 'mis-reportes');
+  renderNav();
+  irA(vistaActual);
+})();
+</script>
+
+</body>
+</html>

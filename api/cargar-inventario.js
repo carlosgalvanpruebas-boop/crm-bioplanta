@@ -88,7 +88,9 @@ module.exports = async (req, res) => {
         unidad: a.unidad ? String(a.unidad).trim() : null,
         cantidad: a.cantidad !== undefined && a.cantidad !== null ? Number(a.cantidad) : 0,
         costo_unit: a.costo_unit !== undefined && a.costo_unit !== null ? Number(a.costo_unit) : null,
-        valor_total: a.valor_total !== undefined && a.valor_total !== null ? Number(a.valor_total) : null,
+        // valor_total NO se envía: es una columna calculada automáticamente
+        // por la base de datos (cantidad × costo_unit) y Postgres rechaza
+        // cualquier intento de escribirla directamente.
         actualizado_en: new Date().toISOString(),
       });
     }

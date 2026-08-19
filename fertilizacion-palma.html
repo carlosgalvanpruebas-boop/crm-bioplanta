@@ -38,6 +38,13 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--gris);color:va
 .ficha-top .sub{font-size:12px;color:#888;margin-top:2px}
 .btn-back{background:none;border:none;color:var(--v2);font-size:12px;cursor:pointer;font-family:inherit;margin-bottom:10px}
 
+.palmas-box{background:var(--vlt);border-radius:10px;padding:12px 16px;margin-top:14px;display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.palmas-box label{font-size:12px;font-weight:600;color:var(--v2)}
+.palmas-box input{width:110px;border:1.5px solid #b7e4c7;border-radius:8px;padding:7px 10px;font-size:14px;font-family:inherit;outline:none}
+.palmas-box .nota{font-size:11px;color:#888;flex:1;min-width:160px}
+.btn-guardar-palmas{background:var(--v2);color:#fff;border:none;padding:7px 14px;border-radius:16px;font-size:12px;cursor:pointer;font-family:inherit}
+.btn-guardar-palmas:disabled{opacity:.55}
+
 .toca-box{background:var(--vbg);border-radius:10px;padding:14px 16px;margin-top:14px}
 .toca-box .lbl{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--v2)}
 .toca-item{display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid rgba(0,0,0,.06);flex-wrap:wrap;gap:6px}
@@ -46,6 +53,17 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--gris);color:va
 .toca-cant{font-size:12px;color:#5a6e5e}
 .btn-marcar{background:var(--v2);color:#fff;border:none;padding:6px 12px;border-radius:16px;font-size:11.5px;cursor:pointer;font-family:inherit}
 .chip-hecho{background:var(--v4);color:var(--v1);font-size:11px;font-weight:700;padding:4px 10px;border-radius:12px}
+
+.cumpl-box{display:flex;gap:14px;flex-wrap:wrap;background:var(--beige-lt);border-radius:10px;padding:14px 16px;margin-top:14px}
+.cumpl-item{flex:1;min-width:120px}
+.cumpl-v{font-size:1.15rem;font-weight:800;color:var(--v1)}
+.cumpl-l{font-size:11px;color:#5a6e5e;margin-top:1px}
+
+.sel-bar{display:flex;align-items:center;gap:10px;margin-bottom:8px;flex-wrap:wrap}
+.sel-bar label{font-size:12px;color:var(--v2);display:flex;align-items:center;gap:5px;cursor:pointer}
+.btn-marcar-sel{background:var(--v2);color:#fff;border:none;padding:6px 14px;border-radius:16px;font-size:12px;cursor:pointer;font-family:inherit}
+.btn-marcar-sel:disabled{opacity:.45;cursor:default}
+.chip-mini{background:var(--v4);color:var(--v1);font-size:10.5px;font-weight:700;padding:2px 8px;border-radius:10px}
 
 .sec-tag{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--v3);margin:18px 0 8px;padding-bottom:4px;border-bottom:2px solid var(--vbg)}
 .plan-tbl{width:100%;border-collapse:collapse;font-size:12.5px}
@@ -106,6 +124,19 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--gris);color:va
   </div>
 </div>
 
+<div class="modal-bg" id="modal-lote-bg">
+  <div class="modal">
+    <h3 id="lote-titulo">Marcar ciclos como comprados</h3>
+    <div class="field"><label>Fecha</label><input type="date" id="lote-fecha"></div>
+    <div class="field"><label>Observación (opcional)</label><textarea id="lote-obs" rows="2"></textarea></div>
+    <div class="modal-btns">
+      <button class="btn-cancel" id="lote-cancelar">Cancelar</button>
+      <button class="btn-save" id="lote-guardar">Guardar</button>
+    </div>
+    <div class="msg" id="lote-msg"></div>
+  </div>
+</div>
+
 <script>
 const SUPABASE_URL = 'https://fpqogvxssnoarzgxcitc.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_ccZF-8tenblFEah5lXfd3w_mYTHMtMC';
@@ -115,14 +146,25 @@ const MESES = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto'
 
 let userId = null;
 let miNombre = '';
+let puedeEditarPlan = false;
 let productores = [];
 let productorActual = null;
 let planActual = [];
 let registrosActual = [];
+let palmasOverride = null;
+let seleccionados = new Set();
 
 function fmtBultos(n) {
   if (n === null || n === undefined) return '—';
   return Number(n).toFixed(2).replace(/\.00$/, '') + ' bultos';
+}
+
+function bultosCalculado(f) {
+  // Si hay número de palmas editado y se conoce la dosis por palma, recalcula en vivo.
+  if (palmasOverride && f.dosis_gramos_palma) {
+    return (palmasOverride * f.dosis_gramos_palma) / 50000;
+  }
+  return f.cantidad_bultos;
 }
 
 function renderColabBar() {
@@ -178,15 +220,30 @@ async function abrirProductor(id) {
 
   planActual = plan || [];
   registrosActual = registros || [];
+  const filaConPalmas = planActual.find(f => f.palmas_base !== null && f.palmas_base !== undefined);
+  palmasOverride = filaConPalmas ? Number(filaConPalmas.palmas_base) : null;
   renderFicha();
 }
 
-function yaRegistradoEsteMes(producto) {
-  const ahora = new Date();
+// Un ciclo (mes+producto del plan) se considera cumplido si existe algún
+// registro de ese mismo producto cuya fecha caiga en ese mismo mes del
+// calendario (sin importar el año) — así se puede marcar tanto el ciclo
+// actual como ciclos anteriores ya atrasados.
+function yaRegistradoParaCiclo(f) {
+  const anioActual = new Date().getFullYear();
   return registrosActual.some(r => {
-    const f = new Date(r.fecha + 'T00:00:00');
-    return r.producto === producto && f.getMonth() === ahora.getMonth() && f.getFullYear() === ahora.getFullYear();
+    const fecha = new Date(r.fecha + 'T00:00:00');
+    return r.producto === f.producto && MESES[fecha.getMonth()] === f.mes && fecha.getFullYear() === anioActual;
   });
+}
+
+function calcularCumplimiento() {
+  const total = planActual.length;
+  const cumplidos = planActual.filter(yaRegistradoParaCiclo).length;
+  const pct = total ? Math.round((cumplidos / total) * 100) : 0;
+  const totalPlaneado = planActual.reduce((s, f) => s + (bultosCalculado(f) || 0), 0);
+  const totalRegistrado = registrosActual.reduce((s, r) => s + (Number(r.cantidad_bultos) || 0), 0);
+  return { total, cumplidos, pct, totalPlaneado, totalRegistrado };
 }
 
 function renderFicha() {
@@ -196,27 +253,57 @@ function renderFicha() {
 
   const tocaHtml = planMesActual.length === 0
     ? '<div class="empty">Este productor no tiene un producto asignado para este mes en su plan.</div>'
-    : planMesActual.map(f => `
+    : planMesActual.map(f => {
+        const bultos = bultosCalculado(f);
+        return `
         <div class="toca-item">
           <div>
             <div class="toca-prod">${f.producto}</div>
-            <div class="toca-cant">${fmtBultos(f.cantidad_bultos)}${f.dosis_gramos_palma ? ' · ' + f.dosis_gramos_palma + ' g/palma' : ''}</div>
+            <div class="toca-cant">${fmtBultos(bultos)}${f.dosis_gramos_palma ? ' · dosis ' + f.dosis_gramos_palma + ' g/palma' : ''}</div>
           </div>
-          ${yaRegistradoEsteMes(f.producto)
+          ${yaRegistradoParaCiclo(f)
             ? '<span class="chip-hecho">✓ Ya registrado</span>'
-            : `<button class="btn-marcar" data-producto="${f.producto}" data-cantidad="${f.cantidad_bultos || ''}">Marcar comprado</button>`}
+            : `<button class="btn-marcar" data-producto="${f.producto}" data-cantidad="${bultos || ''}">Marcar comprado</button>`}
         </div>
-      `).join('');
+      `;
+      }).join('');
+
+  const cumpl = calcularCumplimiento();
+  const cumplHtml = planActual.length === 0 ? '' : `
+    <div class="cumpl-box">
+      <div class="cumpl-item"><div class="cumpl-v">${cumpl.cumplidos}/${cumpl.total}</div><div class="cumpl-l">Ciclos cumplidos (${cumpl.pct}%)</div></div>
+      <div class="cumpl-item"><div class="cumpl-v">${fmtBultos(cumpl.totalPlaneado)}</div><div class="cumpl-l">Total planeado en el año</div></div>
+      <div class="cumpl-item"><div class="cumpl-v">${fmtBultos(cumpl.totalRegistrado)}</div><div class="cumpl-l">Total ya registrado</div></div>
+    </div>`;
+
+  const selBarHtml = planActual.length === 0 ? '' : `
+    <div class="sel-bar">
+      <label><input type="checkbox" id="chk-todos"> Seleccionar todos los ciclos pendientes</label>
+      <button class="btn-marcar-sel" id="btn-marcar-sel" disabled>Marcar seleccionados como comprados</button>
+    </div>`;
 
   const planTablaHtml = planActual.length === 0
     ? '<div class="empty">Este productor todavía no tiene un plan de fertilización cargado.</div>'
     : `<table class="plan-tbl">
-        <thead><tr><th>Mes</th><th>Producto</th><th>Cantidad</th></tr></thead>
-        <tbody>${planActual.map(f => `
+        <thead><tr><th></th><th>Mes</th><th>Producto</th><th>Dosis (g/palma)</th><th>Cantidad</th><th>Estado</th></tr></thead>
+        <tbody>${planActual.map(f => {
+          const cumplido = yaRegistradoParaCiclo(f);
+          return `
           <tr${f.mes === mesHoy ? ' style="background:var(--vbg)"' : ''}>
-            <td>${f.mes}</td><td>${f.producto}</td><td>${fmtBultos(f.cantidad_bultos)}</td>
-          </tr>`).join('')}</tbody>
+            <td>${cumplido ? '' : `<input type="checkbox" class="chk-ciclo" data-id="${f.id}">`}</td>
+            <td>${f.mes}</td><td>${f.producto}</td><td>${f.dosis_gramos_palma || '—'}</td><td>${fmtBultos(bultosCalculado(f))}</td>
+            <td>${cumplido ? '<span class="chip-mini">✓ Cumplido</span>' : '—'}</td>
+          </tr>`;
+        }).join('')}</tbody>
       </table>`;
+
+  const palmasHtml = `
+    <div class="palmas-box">
+      <label>N.º de palmas</label>
+      <input type="number" min="0" step="1" id="f-palmas" value="${palmasOverride !== null ? palmasOverride : ''}" placeholder="Sin dato">
+      <span class="nota">Cambia este número si el productor tiene más o menos palmas que las registradas — las cantidades se recalculan automáticamente.</span>
+      ${puedeEditarPlan ? '<button class="btn-guardar-palmas" id="btn-guardar-palmas">Guardar</button>' : ''}
+    </div>`;
 
   const historialHtml = registrosActual.length === 0
     ? '<div class="empty">Sin registros de fertilización todavía.</div>'
@@ -238,12 +325,17 @@ function renderFicha() {
         </div>
       </div>
 
+      ${palmasHtml}
+
       <div class="toca-box">
         <div class="lbl">Le toca en ${mesHoy}</div>
         ${tocaHtml}
       </div>
 
+      ${cumplHtml}
+
       <div class="sec-tag">Plan completo</div>
+      ${selBarHtml}
       ${planTablaHtml}
 
       <div class="sec-tag">Historial de fertilización</div>
@@ -255,6 +347,43 @@ function renderFicha() {
   document.querySelectorAll('.btn-marcar').forEach(btn => {
     btn.addEventListener('click', () => abrirModalMarcar(btn.dataset.producto, btn.dataset.cantidad));
   });
+
+  const inputPalmas = document.getElementById('f-palmas');
+  if (inputPalmas) {
+    inputPalmas.addEventListener('input', () => {
+      const v = inputPalmas.value;
+      palmasOverride = v ? Number(v) : null;
+      renderFicha();
+      // Re-enfocar el campo tras el rerender, para que se pueda seguir escribiendo.
+      const nuevo = document.getElementById('f-palmas');
+      if (nuevo) { nuevo.focus(); nuevo.setSelectionRange(nuevo.value.length, nuevo.value.length); }
+    });
+  }
+  document.getElementById('btn-guardar-palmas')?.addEventListener('click', guardarPalmas);
+
+  seleccionados.clear();
+  const chkTodos = document.getElementById('chk-todos');
+  const btnMarcarSel = document.getElementById('btn-marcar-sel');
+  function actualizarBtnSel() {
+    btnMarcarSel.disabled = seleccionados.size === 0;
+    btnMarcarSel.textContent = seleccionados.size > 0
+      ? `Marcar ${seleccionados.size} seleccionado(s) como comprados`
+      : 'Marcar seleccionados como comprados';
+  }
+  document.querySelectorAll('.chk-ciclo').forEach(chk => {
+    chk.addEventListener('change', () => {
+      if (chk.checked) seleccionados.add(chk.dataset.id); else seleccionados.delete(chk.dataset.id);
+      actualizarBtnSel();
+    });
+  });
+  chkTodos?.addEventListener('change', () => {
+    document.querySelectorAll('.chk-ciclo').forEach(chk => {
+      chk.checked = chkTodos.checked;
+      if (chkTodos.checked) seleccionados.add(chk.dataset.id); else seleccionados.delete(chk.dataset.id);
+    });
+    actualizarBtnSel();
+  });
+  btnMarcarSel?.addEventListener('click', abrirModalMarcarLote);
 }
 
 function abrirModalMarcar(producto, cantidad) {
@@ -308,6 +437,78 @@ document.getElementById('m-guardar').addEventListener('click', async () => {
   }
 });
 
+async function guardarPalmas() {
+  const btn = document.getElementById('btn-guardar-palmas');
+  if (!btn || palmasOverride === null) return;
+  btn.disabled = true; btn.textContent = 'Guardando...';
+
+  try {
+    const filas = planActual.filter(f => f.dosis_gramos_palma !== null && f.dosis_gramos_palma !== undefined);
+    await Promise.all(filas.map(f => {
+      const nuevoBultos = (palmasOverride * f.dosis_gramos_palma) / 50000;
+      return sb.from('plan_fertilizacion_palma').update({
+        palmas_base: palmasOverride,
+        cantidad_bultos: nuevoBultos,
+      }).eq('id', f.id);
+    }));
+    await abrirProductor(productorActual.id);
+  } catch (e) {
+    alert('❌ No se pudo guardar el número de palmas: ' + (e.message || e));
+    btn.disabled = false; btn.textContent = 'Guardar';
+  }
+}
+
+function abrirModalMarcarLote() {
+  document.getElementById('lote-titulo').textContent = `Marcar ${seleccionados.size} ciclo(s) como comprados`;
+  document.getElementById('lote-fecha').value = new Date().toISOString().slice(0, 10);
+  document.getElementById('lote-obs').value = '';
+  document.getElementById('lote-msg').className = 'msg';
+  document.getElementById('lote-msg').textContent = '';
+  document.getElementById('modal-lote-bg').classList.add('show');
+}
+
+document.getElementById('lote-cancelar').addEventListener('click', () => {
+  document.getElementById('modal-lote-bg').classList.remove('show');
+});
+
+document.getElementById('lote-guardar').addEventListener('click', async () => {
+  const fecha = document.getElementById('lote-fecha').value;
+  const obs = document.getElementById('lote-obs').value.trim();
+  const msgEl = document.getElementById('lote-msg');
+
+  if (!fecha || seleccionados.size === 0) {
+    msgEl.className = 'msg err'; msgEl.textContent = '⚠️ Falta la fecha o no hay ciclos seleccionados'; return;
+  }
+
+  const btn = document.getElementById('lote-guardar');
+  btn.disabled = true; btn.textContent = 'Guardando...';
+
+  try {
+    const filas = planActual.filter(f => seleccionados.has(f.id));
+    const inserts = filas.map(f => ({
+      productor_id: productorActual.id,
+      fecha,
+      producto: f.producto,
+      cantidad_bultos: bultosCalculado(f),
+      observacion: obs || null,
+      registrado_por: userId,
+    }));
+    const { error } = await sb.from('registro_fertilizacion_palma').insert(inserts);
+    if (error) throw error;
+
+    msgEl.className = 'msg ok'; msgEl.textContent = `✅ ${filas.length} ciclo(s) registrado(s)`;
+    seleccionados.clear();
+    setTimeout(async () => {
+      document.getElementById('modal-lote-bg').classList.remove('show');
+      await abrirProductor(productorActual.id);
+    }, 900);
+  } catch (e) {
+    msgEl.className = 'msg err'; msgEl.textContent = '❌ ' + (e.message || 'Error al guardar');
+  } finally {
+    btn.disabled = false; btn.textContent = 'Guardar';
+  }
+});
+
 // ── INIT ──────────────────────────────────────────────────────────────────────
 (async () => {
   const { data: { session } } = await sb.auth.getSession();
@@ -321,6 +522,9 @@ document.getElementById('m-guardar').addEventListener('click', async () => {
   }
   miNombre = perfil.nombre;
   renderColabBar();
+
+  const { data: permisos } = await sb.from('permisos_modulo').select('*').eq('perfil_id', userId);
+  puedeEditarPlan = !!perfil.es_super_admin || (permisos || []).some(p => p.modulo === 2 && p.nivel === 'completo');
 
   const { data, error } = await sb.from('productores_palma').select('*').order('predio');
   if (error) {

@@ -78,14 +78,17 @@ const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 // columnas vacías o mal ubicadas, se ajusta esta lista (mismo tipo de
 // ajuste que hubo que hacer con el cargador de inventario).
 const ALIAS = {
-  factura: ['numero de factura', 'número de factura', 'no. factura', 'factura', 'documento'],
-  fecha: ['fecha de factura', 'fecha factura', 'fecha venta', 'fecha'],
-  codigo_sap: ['numero de articulo', 'número de artículo', 'codigo sap', 'código sap', 'codigo', 'código', 'item code'],
-  producto: ['descripcion', 'descripción', 'nombre', 'producto', 'item name'],
-  cantidad: ['cantidad vendida', 'cantidad', 'unidades'],
-  valor: ['valor total', 'valor', 'total', 'importe'],
-  cliente: ['nombre del cliente', 'razon social', 'razón social', 'cliente'],
-  cliente_nit: ['nit', 'identificacion', 'identificación', 'cedula/nit', 'cédula/nit'],
+  // "fecha de contabilización" es la fecha real de la venta; "fecha de
+  // vencimiento" (que también trae el reporte) es la fecha límite de pago
+  // del crédito — a propósito NO se usa esa para "fecha".
+  factura: ['numero de documento', 'número de documento', 'numero de factura', 'número de factura', 'no. factura', 'factura', 'documento'],
+  fecha: ['fecha de contabilizacion', 'fecha de contabilización', 'fecha de factura', 'fecha factura', 'fecha venta', 'fecha'],
+  codigo_sap: ['itemcode', 'numero de articulo', 'número de artículo', 'codigo sap', 'código sap', 'codigo', 'código', 'item code'],
+  producto: ['dscription', 'descripcion', 'descripción', 'nombre', 'producto', 'item name'],
+  cantidad: ['quantity', 'cantidad vendida', 'cantidad', 'unidades'],
+  valor: ['ingreso total', 'valor total', 'valor', 'total', 'importe'],
+  cliente: ['nombre de cliente/proveedor', 'nombre del cliente', 'razon social', 'razón social', 'cliente'],
+  cliente_nit: ['codigo de cliente/proveedor', 'código de cliente/proveedor', 'nit', 'identificacion', 'identificación', 'cedula/nit', 'cédula/nit'],
   vendedor: ['empleado de ventas', 'asesor', 'vendedor'],
 };
 function normaliza(s) {

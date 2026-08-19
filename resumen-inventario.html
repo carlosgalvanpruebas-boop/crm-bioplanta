@@ -111,7 +111,7 @@ const KEYWORDS_GRUPO = {
 let miId = null;
 let miPerfil = null;
 let esSuperAdmin = false;
-let puedeGenerar = false; // módulo 2 completo o super admin
+let puedeGenerar = false; // Bodega/Mostrador/Almacén (Módulo 1 operativo), o Super Admin para pruebas
 let puedeVer = false;
 let vistaActual = 'sorteo';
 let inventarioTodo = [];
@@ -201,7 +201,7 @@ async function renderSorteo() {
 
   if (!sorteosActuales.length) {
     document.getElementById('wrap').innerHTML = `
-      <div class="aviso">Todavía no hay un sorteo asignado para ti esta semana, o no tienes permiso para generarlo (eso lo dispara automáticamente alguien con Módulo 2 completo — Carlos, Diego o Alejandra — la primera vez que entra en la semana).</div>
+      <div class="aviso">Todavía no hay un sorteo asignado para ti esta semana. El sorteo se genera automáticamente cuando alguien de Bodega, Mostrador o Almacén entra por primera vez en la semana a esta página — si nadie de esas áreas ha entrado todavía, avísales que revisen aquí.</div>
     `;
     return;
   }
@@ -454,8 +454,13 @@ async function resolverDescuadre(id) {
   esSuperAdmin = perfil.es_super_admin;
   const nivel1 = (permisos || []).find(p => p.modulo === 1)?.nivel || 'inactivo';
   const nivel2 = (permisos || []).find(p => p.modulo === 2)?.nivel || 'inactivo';
-  puedeGenerar = esSuperAdmin || nivel2 === 'completo';
-  puedeResolver = puedeGenerar;
+  const cargo = (perfil.cargo || '').toLowerCase();
+  const esOperativo = cargo.includes('bodega') || cargo.includes('mostrador') || cargo.includes('almacén') || cargo.includes('almacen');
+  // El sorteo lo dispara quien realmente cuenta (Bodega/Mostrador/Almacén),
+  // no Módulo 2 — Carlos, Diego (por su cargo) y Alejandra solo consultan
+  // resultados y resuelven descuadres, no inician el sorteo.
+  puedeGenerar = esOperativo || esSuperAdmin;
+  puedeResolver = esSuperAdmin || nivel2 === 'completo';
   puedeVer = esSuperAdmin || nivel1 !== 'inactivo' || nivel2 !== 'inactivo';
 
   if (!puedeVer) {

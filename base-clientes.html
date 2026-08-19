@@ -1,0 +1,245 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Agrotienda Bioplanta · Base de datos de clientes</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+:root{--v1:#33513a;--v2:#4f7c5a;--v3:#84a38c;--v4:#a9c2af;--vbg:#eaefeb;--vlt:#f4f8f5;--texto:#1a2e1a;--beige:#e6ceab;--vino:#984745}
+body{font-family:'Segoe UI',system-ui,sans-serif;background:#f0f4f0;color:var(--texto);min-height:100vh}
+.header{background:linear-gradient(135deg,var(--v1),var(--v2));color:#fff;padding:16px 20px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;box-shadow:0 2px 12px rgba(0,0,0,.2)}
+.hdr-l{display:flex;align-items:center;gap:10px}
+.logo-ico{font-size:26px}
+.brand{font-size:15px;font-weight:800}
+.brand-sub{font-size:11px;opacity:.8}
+.hdr-r{display:flex;gap:8px}
+.btn-h{background:rgba(255,255,255,.15);border:1px solid rgba(255,255,255,.3);color:#fff;padding:7px 16px;border-radius:20px;font-size:12px;cursor:pointer;font-family:inherit;text-decoration:none}
+
+.wrap{max-width:1150px;margin:0 auto;padding:18px 18px 60px}
+.loading{text-align:center;padding:80px;color:#888}
+
+.aviso{background:var(--beige);color:var(--v1);border-radius:10px;padding:12px 16px;font-size:12.5px;margin-bottom:16px;line-height:1.5}
+
+.indicadores{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:12px;margin-bottom:18px}
+.ind{background:#fff;border-radius:14px;padding:14px 16px;box-shadow:0 2px 10px rgba(0,0,0,.06)}
+.ind b{display:block;font-size:22px;font-weight:800;color:var(--v1)}
+.ind span{font-size:11.5px;color:#777}
+
+.filtros{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px;align-items:center}
+.filtros select,.filtros input{border:1.5px solid #d6e2d9;border-radius:8px;padding:8px 10px;font-size:12.5px;font-family:inherit}
+.filtros input{flex:1;min-width:180px}
+.btn-exp{background:var(--v2);color:#fff;border:none;border-radius:8px;padding:8px 14px;font-size:12.5px;font-weight:700;cursor:pointer;font-family:inherit;white-space:nowrap}
+
+.card{background:#fff;border-radius:16px;padding:8px 0;box-shadow:0 2px 10px rgba(0,0,0,.07)}
+.fila{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:12px 20px;border-bottom:1px solid var(--vbg);flex-wrap:wrap}
+.fila:last-child{border-bottom:none}
+.f-info{flex:1;min-width:200px}
+.f-nom{font-size:14px;font-weight:800;color:var(--v1)}
+.f-meta{font-size:11.5px;color:#888;margin-top:2px}
+.f-datos{display:flex;gap:6px;align-items:center;flex-wrap:wrap;max-width:420px;justify-content:flex-end}
+.dato{font-size:11px;color:var(--v2);background:var(--vlt);padding:3px 9px;border-radius:12px}
+.cat-tag{font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700}
+.cat-grande{background:var(--vino);color:#fff}
+.cat-mediano{background:var(--beige);color:var(--v1)}
+.cat-pequeño{background:var(--vlt);color:var(--v2);border:1px solid #b7e4c7}
+.sin-dato{font-size:11px;color:#a00;background:#fde8e8;padding:2px 8px;border-radius:10px}
+.vacio{text-align:center;padding:40px;color:#999;font-size:13px}
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div class="hdr-l">
+    <div class="logo-ico">🗂️</div>
+    <div>
+      <div class="brand">Base de datos de clientes</div>
+      <div class="brand-sub">Vista consolidada · Mostrador (2.6)</div>
+    </div>
+  </div>
+  <div class="hdr-r">
+    <a class="btn-h" href="hub.html">← Hub</a>
+  </div>
+</div>
+
+<div class="wrap" id="wrap">
+  <div class="loading">Cargando...</div>
+</div>
+
+<script>
+const SUPABASE_URL = 'https://fpqogvxssnoarzgxcitc.supabase.co';
+const SUPABASE_KEY = 'sb_publishable_ccZF-8tenblFEah5lXfd3w_mYTHMtMC';
+const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+let clientes = [];
+let filtroSede = 'todas';
+let filtroCat = 'todas';
+let filtroCultivo = 'todos';
+let filtroMunicipio = 'todos';
+let filtroTexto = '';
+
+function fmtFecha(iso) {
+  if (!iso) return '—';
+  return new Date(iso).toLocaleDateString('es-CO', { day: '2-digit', month: 'short', year: 'numeric' });
+}
+
+function categoriaEconomica(area) {
+  const a = parseFloat(area);
+  if (area === null || area === undefined || isNaN(a)) return null;
+  if (a > 10) return 'Grande';
+  if (a > 2) return 'Mediano';
+  return 'Pequeño';
+}
+function catClase(cat) {
+  return cat === 'Grande' ? 'cat-grande' : cat === 'Mediano' ? 'cat-mediano' : 'cat-pequeño';
+}
+
+function opcionesUnicas(lista, campo) {
+  return [...new Set(lista.map(c => c[campo]).filter(Boolean))].sort();
+}
+
+function aplicarFiltros() {
+  return clientes.filter(c => {
+    if (filtroSede === 'sinclasificar') { if (c.sede) return false; }
+    else if (filtroSede !== 'todas' && c.sede !== filtroSede) return false;
+    const cat = categoriaEconomica(c.area_hectareas);
+    if (filtroCat === 'sindato') { if (cat) return false; }
+    else if (filtroCat !== 'todas' && cat !== filtroCat) return false;
+    if (filtroCultivo !== 'todos' && c.cultivo !== filtroCultivo) return false;
+    if (filtroMunicipio !== 'todos' && c.municipio !== filtroMunicipio) return false;
+    if (filtroTexto) {
+      const t = filtroTexto.toLowerCase();
+      const match = (c.nombre||'').toLowerCase().includes(t) || (c.telefono||'').includes(filtroTexto) || (c.cedula||'').includes(filtroTexto);
+      if (!match) return false;
+    }
+    return true;
+  });
+}
+
+function exportarCSV(lista) {
+  const cols = ['nombre','cedula','telefono','municipio','vereda','sede','area_hectareas','cultivo','productos','como_llego','whatsapp','colaboradora','creado_en'];
+  const filas = [cols.join(',')];
+  lista.forEach(c => {
+    const fila = cols.map(col => {
+      let v = c[col];
+      if (Array.isArray(v)) v = v.join(' / ');
+      v = v === null || v === undefined ? '' : String(v);
+      v = v.replace(/"/g, '""');
+      return `"${v}"`;
+    });
+    filas.push(fila.join(','));
+  });
+  const blob = new Blob(['﻿' + filas.join('\n')], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `clientes-agrotienda-${new Date().toISOString().slice(0,10)}.csv`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+function render() {
+  const lista = aplicarFiltros();
+  const cultivos = opcionesUnicas(clientes, 'cultivo');
+  const municipios = opcionesUnicas(clientes, 'municipio');
+
+  const grandes = clientes.filter(c => categoriaEconomica(c.area_hectareas) === 'Grande').length;
+  const conDatos = clientes.filter(c => c.acepta_datos).length;
+  const conWhatsapp = clientes.filter(c => c.whatsapp === 'si').length;
+
+  const filasHtml = lista.length ? lista.map(c => {
+    const cat = categoriaEconomica(c.area_hectareas);
+    const ubicacion = [c.municipio, c.vereda ? `Vereda ${c.vereda}` : ''].filter(Boolean).join(' · ');
+    return `
+      <div class="fila">
+        <div class="f-info">
+          <div class="f-nom">${c.nombre || 'Sin nombre'} ${cat ? `<span class="cat-tag ${catClase(cat)}">${cat}</span>` : ''}</div>
+          <div class="f-meta">${c.telefono || '—'} · ${ubicacion || 'Sin ubicación'} · Registrado por ${c.colaboradora || '—'} (${fmtFecha(c.creado_en)})</div>
+        </div>
+        <div class="f-datos">
+          ${c.sede ? `<span class="dato">📍 ${c.sede}</span>` : `<span class="sin-dato">Sin sede</span>`}
+          ${c.cultivo ? `<span class="dato">🌾 ${c.cultivo}</span>` : ''}
+          ${c.area_hectareas != null ? `<span class="dato">📐 ${c.area_hectareas} ha</span>` : ''}
+          ${c.acepta_datos ? '' : `<span class="sin-dato">⚠️ Sin autorización</span>`}
+        </div>
+      </div>
+    `;
+  }).join('') : '<div class="vacio">No hay clientes que coincidan con el filtro.</div>';
+
+  document.getElementById('wrap').innerHTML = `
+    <div class="aviso">
+      ℹ️ Esta pantalla es de solo consulta — el registro diario de clientes se hace desde 1.1 en Mostrador. La sede se empezó a guardar automáticamente desde ahora (19-ago); los registros más antiguos se clasificaron cruzando el nombre de quien atendió, así que algunos pueden quedar "Sin sede" si ese cruce no fue posible.
+    </div>
+    <div class="indicadores">
+      <div class="ind"><b>${clientes.length}</b><span>Total registros</span></div>
+      <div class="ind"><b>${grandes}</b><span>Grandes productores</span></div>
+      <div class="ind"><b>${conDatos}</b><span>Con autorización de datos</span></div>
+      <div class="ind"><b>${conWhatsapp}</b><span>Aceptan WhatsApp</span></div>
+    </div>
+    <div class="filtros">
+      <select onchange="filtroSede=this.value; render()">
+        <option value="todas" ${filtroSede==='todas'?'selected':''}>Todas las sedes</option>
+        <option value="Chigorodó" ${filtroSede==='Chigorodó'?'selected':''}>Chigorodó</option>
+        <option value="Belén de Bajirá" ${filtroSede==='Belén de Bajirá'?'selected':''}>Belén de Bajirá</option>
+        <option value="Ambas" ${filtroSede==='Ambas'?'selected':''}>Ambas</option>
+        <option value="sinclasificar" ${filtroSede==='sinclasificar'?'selected':''}>Sin sede</option>
+      </select>
+      <select onchange="filtroCat=this.value; render()">
+        <option value="todas" ${filtroCat==='todas'?'selected':''}>Toda categoría</option>
+        <option value="Grande" ${filtroCat==='Grande'?'selected':''}>Grande (&gt;10 ha)</option>
+        <option value="Mediano" ${filtroCat==='Mediano'?'selected':''}>Mediano (2-10 ha)</option>
+        <option value="Pequeño" ${filtroCat==='Pequeño'?'selected':''}>Pequeño (&lt;2 ha)</option>
+        <option value="sindato" ${filtroCat==='sindato'?'selected':''}>Sin área registrada</option>
+      </select>
+      <select onchange="filtroCultivo=this.value; render()">
+        <option value="todos">Todo cultivo</option>
+        ${cultivos.map(c => `<option value="${c}" ${filtroCultivo===c?'selected':''}>${c}</option>`).join('')}
+      </select>
+      <select onchange="filtroMunicipio=this.value; render()">
+        <option value="todos">Todo municipio</option>
+        ${municipios.map(m => `<option value="${m}" ${filtroMunicipio===m?'selected':''}>${m}</option>`).join('')}
+      </select>
+      <input type="text" placeholder="Buscar nombre, cédula o teléfono..." value="${filtroTexto}" oninput="filtroTexto=this.value; render()">
+      <button class="btn-exp" onclick="exportarCSV(aplicarFiltros())">⬇️ Exportar CSV</button>
+    </div>
+    <div class="card">${filasHtml}</div>
+  `;
+}
+
+(async () => {
+  const { data: { session } } = await sb.auth.getSession();
+  if (!session) { window.location.href = 'login.html'; return; }
+
+  const userId = session.user.id;
+  const [{ data: perfil }, { data: permisos }] = await Promise.all([
+    sb.from('perfiles').select('*').eq('id', userId).single(),
+    sb.from('permisos_modulo').select('*').eq('perfil_id', userId),
+  ]);
+
+  if (!perfil) {
+    document.getElementById('wrap').innerHTML = '<div class="loading">Tu usuario no tiene un perfil configurado todavía.</div>';
+    return;
+  }
+
+  const esSuperAdmin = perfil.es_super_admin;
+  const nivel2 = (permisos || []).find(p => p.modulo === 2)?.nivel || 'inactivo';
+  const puedeVer = esSuperAdmin || nivel2 !== 'inactivo';
+
+  if (!puedeVer) {
+    document.getElementById('wrap').innerHTML = '<div class="loading">No tienes permiso para ver este módulo.</div>';
+    return;
+  }
+
+  const { data, error } = await sb.from('clientes_agrotienda').select('*').order('creado_en', { ascending: false });
+  if (error) {
+    document.getElementById('wrap').innerHTML = '<div class="loading">No se pudo cargar la base de clientes: ' + error.message + '</div>';
+    return;
+  }
+  clientes = data || [];
+  render();
+})();
+</script>
+
+</body>
+</html>

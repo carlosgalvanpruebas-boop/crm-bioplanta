@@ -1,0 +1,360 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Agrotienda Bioplanta · Tablero de Tareas</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+:root{--v1:#33513a;--v2:#4f7c5a;--v3:#84a38c;--v4:#a9c2af;--vbg:#eaefeb;--vlt:#f4f8f5;--gris:#f0f4f0;--texto:#1a2e1a;--beige:#e6ceab;--beige-lt:#f4e9d9;--vino:#984745;--vino-lt:#f3e9e9}
+body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--gris);color:var(--texto);min-height:100vh;font-size:14px}
+
+.header{background:linear-gradient(135deg,var(--v1),var(--v2));color:#fff;padding:16px 20px;position:sticky;top:0;z-index:20;box-shadow:0 2px 12px rgba(0,0,0,.25)}
+.hdr-top{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap}
+.logo-wrap{display:flex;align-items:center;gap:10px}
+.logo-ico{font-size:26px}
+.brand{font-size:15px;font-weight:700}
+.brand-sub{font-size:11px;opacity:.75;margin-top:1px}
+.hdr-btns{display:flex;gap:8px;flex-wrap:wrap}
+.btn-h{background:rgba(255,255,255,.15);border:1px solid rgba(255,255,255,.3);color:#fff;padding:7px 16px;border-radius:20px;font-size:12px;cursor:pointer;font-family:inherit;text-decoration:none;display:inline-block}
+.btn-h:hover{background:rgba(255,255,255,.28)}
+.btn-h-act{background:var(--v4);border-color:var(--v4);color:var(--v1);font-weight:700}
+
+.wrap{max-width:1100px;margin:0 auto;padding:22px 16px 60px}
+.colab-bar{margin-top:12px;font-size:12px;opacity:.85}
+.session-badge{background:var(--v4);color:var(--v1);padding:4px 12px;border-radius:16px;font-weight:700;margin-left:6px}
+
+/* FORM NUEVA TAREA */
+.form-box{background:#fff;border-radius:14px;padding:22px;box-shadow:0 2px 10px rgba(0,0,0,.07);max-width:620px;margin:0 auto}
+.field{display:flex;flex-direction:column;gap:5px;margin-bottom:14px}
+.field label{font-size:12px;font-weight:600;color:var(--v2)}
+.field input,.field select,.field textarea{border:1.5px solid #b7e4c7;border-radius:8px;padding:10px 12px;font-size:14px;font-family:inherit;outline:none;color:var(--texto);background:#fff;width:100%}
+.field textarea{resize:vertical}
+.asig-list{display:flex;flex-wrap:wrap;gap:8px}
+.asig-chip{display:flex;align-items:center;gap:6px;background:var(--vlt);border:1.5px solid #b7e4c7;border-radius:20px;padding:6px 12px;font-size:12.5px;cursor:pointer}
+.asig-chip.on{background:var(--v2);border-color:var(--v2);color:#fff;font-weight:600}
+.btn-save{width:100%;margin-top:8px;padding:14px;background:linear-gradient(135deg,var(--v1),var(--v2));color:#fff;border:none;border-radius:10px;font-size:15px;font-weight:700;cursor:pointer;font-family:inherit}
+.btn-save:disabled{opacity:.55}
+.msg{margin-top:14px;padding:10px 14px;border-radius:8px;font-size:14px;text-align:center;display:none}
+.msg.ok{background:var(--vbg);color:var(--v1);display:block}
+.msg.err{background:#fde8e8;color:#a00;display:block}
+
+/* KANBAN */
+.kanban{display:grid;grid-template-columns:repeat(3,1fr);gap:14px}
+@media(max-width:760px){.kanban{grid-template-columns:1fr}}
+.col{background:#fff;border-radius:14px;padding:14px;box-shadow:0 1px 6px rgba(0,0,0,.06);min-height:120px}
+.col-t{font-size:12px;font-weight:800;text-transform:uppercase;letter-spacing:.5px;color:var(--v2);margin-bottom:10px;display:flex;justify-content:space-between}
+.card-t{background:var(--vlt);border-radius:10px;padding:12px;margin-bottom:10px;border-left:4px solid var(--v3)}
+.card-t.alta{border-left-color:var(--vino)}
+.card-tit{font-size:13.5px;font-weight:700;color:var(--v1)}
+.card-desc{font-size:12px;color:#5a6e5e;margin-top:4px;line-height:1.4}
+.card-meta{display:flex;justify-content:space-between;align-items:center;margin-top:8px;font-size:11px;color:#888}
+.prio-tag{font-size:9.5px;font-weight:800;padding:2px 8px;border-radius:8px;background:var(--beige);color:var(--v1)}
+.prio-tag.alta{background:var(--vino);color:#fff}
+.card-sel{margin-top:8px;width:100%;font-size:12px;padding:6px 8px;border-radius:6px;border:1.5px solid #b7e4c7;font-family:inherit}
+.empty-col{text-align:center;color:#aaa;font-size:12px;padding:16px 0}
+
+/* LISTADO */
+.fil-bar{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px}
+.fil-bar select,.fil-bar input{border:1.5px solid #b7e4c7;border-radius:8px;padding:8px 12px;font-size:13px;background:#fff;font-family:inherit;outline:none;flex:1;min-width:160px}
+.row-list{display:flex;flex-direction:column;gap:10px}
+.rowcard{background:#fff;border-radius:12px;box-shadow:0 1px 6px rgba(0,0,0,.07);padding:14px 16px}
+.rowcard-top{display:flex;justify-content:space-between;align-items:flex-start;gap:10px;flex-wrap:wrap}
+.rowcard-tit{font-size:14px;font-weight:700;color:var(--v1)}
+.rowcard-desc{font-size:12.5px;color:#5a6e5e;margin-top:4px}
+.rowcard-meta{font-size:11px;color:#888;margin-top:6px}
+.asignados-g{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
+.asig-badge{font-size:11px;padding:3px 10px;border-radius:12px;background:var(--vlt);color:var(--v2)}
+.asig-badge.completada{background:var(--v4);color:var(--v1)}
+.asig-badge.en_proceso{background:var(--beige);color:var(--v1)}
+.empty{text-align:center;padding:48px;color:#888;font-size:14px}
+.spin{text-align:center;padding:48px;font-size:28px}
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div class="hdr-top">
+    <div class="logo-wrap">
+      <div class="logo-ico">🗂️</div>
+      <div>
+        <div class="brand">Tablero de Tareas</div>
+        <div class="brand-sub" style="font-style:italic;">Mostrador / Administrativo</div>
+      </div>
+    </div>
+    <div class="hdr-btns">
+      <button class="btn-h btn-h-act" id="btn-nueva">+ Nueva tarea</button>
+      <button class="btn-h" id="btn-mis">Mis tareas</button>
+      <button class="btn-h" id="btn-todas">Todas / Las que asigné</button>
+      <a class="btn-h" href="hub.html">← Hub</a>
+    </div>
+  </div>
+  <div class="colab-bar" id="colab-bar"></div>
+</div>
+
+<div class="wrap" id="app"><div class="spin">⏳</div></div>
+
+<script>
+const SUPABASE_URL = 'https://fpqogvxssnoarzgxcitc.supabase.co';
+const SUPABASE_KEY = 'sb_publishable_ccZF-8tenblFEah5lXfd3w_mYTHMtMC';
+const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+const CARGOS_NO_RECIBEN = ['Directora Administrativa', 'Gerente'];
+
+let userId = null;
+let miNombre = '';
+let perfiles = [];      // {id, nombre, cargo}
+let vista = 'mis';       // 'nueva' | 'mis' | 'todas'
+let seleccionados = [];  // ids de perfiles elegidos en el formulario nuevo
+let filtroPersona = 'todas';
+let filtroSoloMias = false;
+
+function renderColabBar() {
+  document.getElementById('colab-bar').innerHTML =
+    `Sesión: <span class="session-badge">${miNombre}</span>`;
+}
+
+function setActiveBtn() {
+  document.getElementById('btn-nueva').classList.toggle('btn-h-act', vista === 'nueva');
+  document.getElementById('btn-mis').classList.toggle('btn-h-act', vista === 'mis');
+  document.getElementById('btn-todas').classList.toggle('btn-h-act', vista === 'todas');
+}
+
+async function render() {
+  setActiveBtn();
+  const app = document.getElementById('app');
+  if (vista === 'nueva') { app.innerHTML = htmlNueva(); bindNueva(); return; }
+  app.innerHTML = '<div class="spin">⏳</div>';
+  if (vista === 'mis') { await renderMis(); }
+  if (vista === 'todas') { await renderTodas(); }
+}
+
+// ── NUEVA TAREA ─────────────────────────────────────────────────────────────
+function htmlNueva() {
+  const elegibles = perfiles.filter(p => !CARGOS_NO_RECIBEN.includes(p.cargo));
+  const chips = elegibles.map(p =>
+    `<div class="asig-chip${seleccionados.includes(p.id) ? ' on' : ''}" data-pid="${p.id}">${p.nombre}</div>`
+  ).join('');
+
+  return `
+  <div class="form-box">
+    <div class="field"><label>Título *</label>
+      <input type="text" id="f-titulo" placeholder="Ej. Revisar vencimiento de facturas">
+    </div>
+    <div class="field"><label>Descripción (opcional)</label>
+      <textarea id="f-desc" rows="2" placeholder="Detalles adicionales..."></textarea>
+    </div>
+    <div class="field"><label>Prioridad</label>
+      <select id="f-prio">
+        <option value="Normal">Normal</option>
+        <option value="Alta">Alta</option>
+      </select>
+    </div>
+    <div class="field"><label>Fecha límite (opcional)</label>
+      <input type="date" id="f-fecha">
+    </div>
+    <div class="field"><label>Asignar a *</label>
+      <div class="asig-list">${chips}</div>
+    </div>
+    <button class="btn-save" id="btn-guardar-tarea">Crear tarea</button>
+    <div class="msg" id="msg"></div>
+  </div>`;
+}
+
+function bindNueva() {
+  document.querySelectorAll('[data-pid]').forEach(el => {
+    el.addEventListener('click', () => {
+      const id = el.dataset.pid;
+      seleccionados = seleccionados.includes(id) ? seleccionados.filter(x => x !== id) : [...seleccionados, id];
+      el.classList.toggle('on');
+    });
+  });
+
+  document.getElementById('btn-guardar-tarea').addEventListener('click', async () => {
+    const titulo = document.getElementById('f-titulo').value.trim();
+    const desc   = document.getElementById('f-desc').value.trim();
+    const prio   = document.getElementById('f-prio').value;
+    const fecha  = document.getElementById('f-fecha').value;
+
+    if (!titulo) { showMsg('⚠️ El título es obligatorio', 'err'); return; }
+    if (seleccionados.length === 0) { showMsg('⚠️ Asigna la tarea a al menos una persona', 'err'); return; }
+
+    const btn = document.getElementById('btn-guardar-tarea');
+    btn.disabled = true;
+    btn.textContent = 'Creando...';
+
+    try {
+      const { data: tarea, error: errT } = await sb.from('tareas').insert({
+        titulo,
+        descripcion: desc || null,
+        prioridad: prio,
+        estado: 'Por hacer',
+        fecha_limite: fecha || null,
+        creado_por: miNombre,
+      }).select().single();
+      if (errT) throw errT;
+
+      const filas = seleccionados.map(pid => ({ tarea_id: tarea.id, perfil_id: pid }));
+      const { error: errA } = await sb.from('tarea_asignados').insert(filas);
+      if (errA) throw errA;
+
+      showMsg('✅ Tarea creada y asignada', 'ok');
+      seleccionados = [];
+      setTimeout(() => { vista = 'mis'; render(); }, 1200);
+    } catch (e) {
+      showMsg('❌ ' + (e.message || 'Error al crear la tarea'), 'err');
+      btn.disabled = false;
+      btn.textContent = 'Crear tarea';
+    }
+  });
+}
+
+function showMsg(txt, tipo) {
+  const el = document.getElementById('msg');
+  if (!el) return;
+  el.textContent = txt;
+  el.className = 'msg ' + tipo;
+}
+
+// ── MIS TAREAS (kanban) ──────────────────────────────────────────────────────
+async function renderMis() {
+  const { data, error } = await sb
+    .from('tarea_asignados')
+    .select('*, tareas(*)')
+    .eq('perfil_id', userId);
+
+  const filas = (error || !data) ? [] : data.filter(f => f.tareas);
+
+  const cols = {
+    por_hacer: filas.filter(f => f.estado_individual === 'por_hacer'),
+    en_proceso: filas.filter(f => f.estado_individual === 'en_proceso'),
+    completada: filas.filter(f => f.estado_individual === 'completada'),
+  };
+
+  const nombreCol = { por_hacer: 'Por hacer', en_proceso: 'En proceso', completada: 'Completadas' };
+
+  const colsHtml = Object.keys(cols).map(key => {
+    const items = cols[key].map(f => {
+      const t = f.tareas;
+      const prioClase = t.prioridad === 'Alta' ? ' alta' : '';
+      return `
+      <div class="card-t${prioClase}">
+        <div class="card-tit">${t.titulo}</div>
+        ${t.descripcion ? `<div class="card-desc">${t.descripcion}</div>` : ''}
+        <div class="card-meta">
+          <span class="prio-tag${prioClase}">${t.prioridad}</span>
+          <span>${t.fecha_limite ? new Date(t.fecha_limite + 'T00:00:00').toLocaleDateString('es-CO',{day:'2-digit',month:'short'}) : ''}</span>
+        </div>
+        <div style="font-size:11px;color:#999;margin-top:4px">Asignada por: ${t.creado_por || '—'}</div>
+        <select class="card-sel" data-asig="${f.id}">
+          <option value="por_hacer"${f.estado_individual==='por_hacer'?' selected':''}>Por hacer</option>
+          <option value="en_proceso"${f.estado_individual==='en_proceso'?' selected':''}>En proceso</option>
+          <option value="completada"${f.estado_individual==='completada'?' selected':''}>Completada</option>
+        </select>
+      </div>`;
+    }).join('');
+    return `
+    <div class="col">
+      <div class="col-t"><span>${nombreCol[key]}</span><span>${cols[key].length}</span></div>
+      ${items || '<div class="empty-col">Sin tareas</div>'}
+    </div>`;
+  }).join('');
+
+  document.getElementById('app').innerHTML = `<div class="kanban">${colsHtml}</div>`;
+
+  document.querySelectorAll('[data-asig]').forEach(sel => {
+    sel.addEventListener('change', async (e) => {
+      const id = e.target.dataset.asig;
+      await sb.from('tarea_asignados').update({ estado_individual: e.target.value }).eq('id', id);
+      renderMis();
+    });
+  });
+}
+
+// ── TODAS / LAS QUE ASIGNÉ ────────────────────────────────────────────────────
+async function renderTodas() {
+  const { data, error } = await sb
+    .from('tareas')
+    .select('*, tarea_asignados(*, perfiles(nombre))')
+    .order('creado_en', { ascending: false });
+
+  const tareas = (error || !data) ? [] : data;
+
+  const personasSet = new Set();
+  tareas.forEach(t => (t.tarea_asignados || []).forEach(a => a.perfiles && personasSet.add(a.perfiles.nombre)));
+  const opcionesPersona = [...personasSet].map(n =>
+    `<option value="${n}"${filtroPersona===n?' selected':''}>${n}</option>`
+  ).join('');
+
+  const filtradas = tareas.filter(t => {
+    const mp = filtroPersona === 'todas' || (t.tarea_asignados||[]).some(a => a.perfiles && a.perfiles.nombre === filtroPersona);
+    const mm = !filtroSoloMias || t.creado_por === miNombre;
+    return mp && mm;
+  });
+
+  const rows = filtradas.length === 0
+    ? '<div class="empty">No hay tareas que coincidan</div>'
+    : filtradas.map(t => {
+        const badges = (t.tarea_asignados || []).map(a =>
+          `<span class="asig-badge ${a.estado_individual}">${a.perfiles ? a.perfiles.nombre : '—'} · ${a.estado_individual.replace('_',' ')}</span>`
+        ).join('');
+        return `
+        <div class="rowcard">
+          <div class="rowcard-top">
+            <div>
+              <div class="rowcard-tit">${t.titulo}</div>
+              ${t.descripcion ? `<div class="rowcard-desc">${t.descripcion}</div>` : ''}
+            </div>
+            <span class="prio-tag${t.prioridad==='Alta'?' alta':''}">${t.prioridad}</span>
+          </div>
+          <div class="rowcard-meta">Creada por ${t.creado_por || '—'} ${t.fecha_limite ? '· vence ' + new Date(t.fecha_limite+'T00:00:00').toLocaleDateString('es-CO',{day:'2-digit',month:'short',year:'numeric'}) : ''}</div>
+          <div class="asignados-g">${badges || '<span class="asig-badge">Sin asignar</span>'}</div>
+        </div>`;
+      }).join('');
+
+  document.getElementById('app').innerHTML = `
+    <div class="fil-bar">
+      <select id="fil-persona">
+        <option value="todas">Todas las personas</option>
+        ${opcionesPersona}
+      </select>
+      <label style="display:flex;align-items:center;gap:6px;font-size:13px;background:#fff;border:1.5px solid #b7e4c7;border-radius:8px;padding:8px 12px;cursor:pointer">
+        <input type="checkbox" id="fil-mias" ${filtroSoloMias?'checked':''}> Solo las que yo asigné
+      </label>
+    </div>
+    <div class="row-list">${rows}</div>
+  `;
+
+  document.getElementById('fil-persona').addEventListener('change', e => { filtroPersona = e.target.value; renderTodas(); });
+  document.getElementById('fil-mias').addEventListener('change', e => { filtroSoloMias = e.target.checked; renderTodas(); });
+}
+
+// ── NAV ───────────────────────────────────────────────────────────────────────
+document.getElementById('btn-nueva').addEventListener('click', () => { vista = 'nueva'; render(); });
+document.getElementById('btn-mis').addEventListener('click', () => { vista = 'mis'; render(); });
+document.getElementById('btn-todas').addEventListener('click', () => { vista = 'todas'; render(); });
+
+// ── INIT ──────────────────────────────────────────────────────────────────────
+(async () => {
+  const { data: { session } } = await sb.auth.getSession();
+  if (!session) { window.location.href = 'login.html'; return; }
+  userId = session.user.id;
+
+  const { data: miPerfil } = await sb.from('perfiles').select('*').eq('id', userId).single();
+  if (!miPerfil) {
+    document.getElementById('app').innerHTML = '<div class="empty">Tu usuario no tiene un perfil configurado todavía. Pídele a Carlos que te lo cree en el Panel de Accesos.</div>';
+    return;
+  }
+  miNombre = miPerfil.nombre;
+  renderColabBar();
+
+  const { data: listaPerfiles } = await sb.from('perfiles').select('id, nombre, cargo');
+  perfiles = listaPerfiles || [];
+
+  render();
+})();
+</script>
+
+</body>
+</html>

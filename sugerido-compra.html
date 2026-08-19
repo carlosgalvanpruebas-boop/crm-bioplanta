@@ -431,6 +431,7 @@ async function autorizarReporte(reporteId) {
       seleccionada: true,
       justificacion_seleccion: justificacion || null,
       ahorro_pct: ahorroPct,
+      estado: 'usada',
     }).eq('id', seleccionadaId),
     ...otras.map(c => sb.from('cotizaciones_proveedor').update({ seleccionada: false }).eq('id', c.id)),
     sb.from('reportes_compra').update({
@@ -440,6 +441,25 @@ async function autorizarReporte(reporteId) {
       justificacion: justificacion || null,
     }).eq('id', reporteId),
   ]);
+
+  // Al autorizar, se crea automáticamente la solicitud de pedido (1.7) ya lista
+  // para que Diego (o quien suba pedidos a SAP) la encuentre en su bandeja —
+  // Carlos ya no tiene que "montarla" aparte, solo autorizar.
+  const { error: errSolicitud } = await sb.from('solicitudes_pedido').insert({
+    origen: 'desde_1.2',
+    reporte_compra_id: reporteId,
+    producto: reporte.producto,
+    cantidad: reporte.cantidad,
+    proveedor: elegida.proveedor_nombre,
+    sede_destino: reporte.sede,
+    cotizacion_id: seleccionadaId,
+    observacion: justificacion || null,
+    estado: 'pendiente_subir',
+    creado_por: session.user.id,
+  });
+  if (errSolicitud) {
+    alert('El reporte quedó autorizado, pero no se pudo crear automáticamente la solicitud de pedido (1.7): ' + errSolicitud.message);
+  }
 
   await renderBandeja();
 }

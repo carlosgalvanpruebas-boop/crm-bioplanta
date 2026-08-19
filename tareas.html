@@ -189,7 +189,7 @@ function bindNueva() {
         titulo,
         descripcion: desc || null,
         prioridad: prio,
-        estado: 'Por hacer',
+        estado: 'pendiente',
         fecha_limite: fecha || null,
         creado_por: miNombre,
       }).select().single();

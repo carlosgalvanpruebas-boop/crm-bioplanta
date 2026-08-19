@@ -243,6 +243,7 @@ async function renderMisReportes() {
             </div>
           </div>
           ${r.motivo ? `<div class="rep-motivo">${r.motivo}</div>` : ''}
+          ${r.cantidad_autorizada != null && r.cantidad_autorizada !== r.cantidad ? `<div class="rep-motivo"><b>Cantidad autorizada:</b> ${r.cantidad_autorizada}</div>` : ''}
           ${r.justificacion && r.estado !== 'pendiente' ? `<div class="rep-motivo"><b>Nota de Carlos:</b> ${r.justificacion}</div>` : ''}
         </div>
       `).join('')}
@@ -263,18 +264,23 @@ async function renderBandeja() {
   }
   cache.bandeja = data || [];
 
-  const { data: todasCotizaciones } = await sb.from('cotizaciones_proveedor').select('*');
-  const cotPorReporte = {};
-  const cotSinVincular = [];
-  (todasCotizaciones || []).forEach(c => {
-    if (c.reporte_compra_id) {
-      if (!cotPorReporte[c.reporte_compra_id]) cotPorReporte[c.reporte_compra_id] = [];
-      cotPorReporte[c.reporte_compra_id].push(c);
-    } else if (c.estado === 'disponible') {
-      cotSinVincular.push(c);
-    }
+  const [{ data: todasCotizaciones }, { data: todosVinculos }] = await Promise.all([
+    sb.from('cotizaciones_proveedor').select('*'),
+    sb.from('cotizacion_reporte').select('*'),
+  ]);
+
+  const cotizacionesPorId = {};
+  (todasCotizaciones || []).forEach(c => { cotizacionesPorId[c.id] = c; });
+
+  const usosPorCotizacion = {};
+  const porReporte = {};
+  (todosVinculos || []).forEach(v => {
+    usosPorCotizacion[v.cotizacion_id] = (usosPorCotizacion[v.cotizacion_id] || 0) + 1;
+    if (!porReporte[v.reporte_compra_id]) porReporte[v.reporte_compra_id] = [];
+    porReporte[v.reporte_compra_id].push({ ...v, cotizacion: cotizacionesPorId[v.cotizacion_id] });
   });
-  cache.cotizaciones = { porReporte: cotPorReporte, sinVincular: cotSinVincular };
+
+  cache.cotizaciones = { todas: todasCotizaciones || [], porId: cotizacionesPorId, porReporte, usosPorCotizacion };
 
   pintarBandeja();
 }
@@ -337,28 +343,42 @@ function renderPanelCotizaciones(reporte, cots) {
   if (!cots.length) {
     html += `<div style="font-size:11.5px;color:#999">Todavía no hay ninguna cotización vinculada a esta solicitud.</div>`;
   } else {
-    cots.forEach(c => {
-      const marcada = c.seleccionada ? ' ⭐' : '';
+    cots.forEach(v => {
+      const c = v.cotizacion;
+      if (!c) return;
+      const marcada = v.ganadora ? ' ⭐' : '';
       html += `
         <div class="cot-item">
           <div class="cot-radio">
-            ${!soloLectura && cots.length > 1 ? `<input type="radio" name="sel-${reporte.id}" value="${c.id}" ${c.seleccionada ? 'checked' : ''}>` : ''}
+            ${!soloLectura && cots.length > 1 ? `<input type="radio" name="sel-${reporte.id}" value="${v.id}" ${v.ganadora ? 'checked' : ''}>` : ''}
             <span>${c.proveedor_nombre} — ${c.producto_servicio} — ${fmtCOP(c.valor_cotizado)}${marcada}</span>
           </div>
+          <a href="${c.archivo_url}" target="_blank" class="btn-mini btn-vincular" style="text-decoration:none">📎 Ver archivo</a>
         </div>
       `;
     });
   }
 
   if (!soloLectura) {
-    const disponibles = cache.cotizaciones.sinVincular.filter(c => !cots.some(x => x.id === c.id));
+    const yaVinculadasIds = cots.map(v => v.cotizacion_id);
+    const disponibles = cache.cotizaciones.todas.filter(c => !yaVinculadasIds.includes(c.id));
     html += `
       <div class="vincular-row">
         <select id="sel-vincular-${reporte.id}">
-          <option value="">— elige una cotización disponible —</option>
-          ${disponibles.map(c => `<option value="${c.id}">${c.proveedor_nombre} — ${c.producto_servicio} — ${fmtCOP(c.valor_cotizado)}</option>`).join('')}
+          <option value="">— elige una cotización para vincular —</option>
+          ${disponibles.map(c => {
+            const usos = cache.cotizaciones.usosPorCotizacion[c.id] || 0;
+            const nota = usos ? ` (ya usada en ${usos} pedido${usos > 1 ? 's' : ''})` : '';
+            return `<option value="${c.id}">${c.proveedor_nombre} — ${c.producto_servicio} — ${fmtCOP(c.valor_cotizado)}${nota}</option>`;
+          }).join('')}
         </select>
         <button class="btn-mini btn-vincular" onclick="vincularCotizacion('${reporte.id}')">🔗 Vincular</button>
+      </div>
+      <div class="nota-obs">Una misma cotización se puede vincular a varios pedidos distintos — no desaparece de la lista después de usarla una vez.</div>
+      <div class="field" style="margin-top:10px">
+        <label>Cantidad a autorizar</label>
+        <input type="number" id="cant-${reporte.id}" min="0" step="1" value="${reporte.cantidad_autorizada != null ? reporte.cantidad_autorizada : (reporte.cantidad != null ? reporte.cantidad : '')}">
+        <div class="nota-obs" style="margin-top:2px">Reportada originalmente: ${reporte.cantidad != null ? reporte.cantidad : '—'}. Puedes autorizar más o menos.</div>
       </div>
       <div class="field" style="margin-top:10px">
         <label>Justificación${cots.length > 1 ? ' (obligatoria si hay más de una cotización)' : ' (opcional)'}</label>
@@ -388,7 +408,7 @@ async function vincularCotizacion(reporteId) {
   const cotId = sel.value;
   if (!cotId) { alert('Elige una cotización primero.'); return; }
 
-  const { error } = await sb.from('cotizaciones_proveedor').update({ reporte_compra_id: reporteId }).eq('id', cotId);
+  const { error } = await sb.from('cotizacion_reporte').insert({ cotizacion_id: cotId, reporte_compra_id: reporteId });
   if (error) { alert('No se pudo vincular: ' + error.message); return; }
 
   await renderBandeja();
@@ -399,11 +419,11 @@ async function autorizarReporte(reporteId) {
   const cots = cache.cotizaciones.porReporte[reporteId] || [];
   if (!cots.length) { alert('Vincula al menos una cotización antes de autorizar.'); return; }
 
-  let seleccionadaId = cots[0].id;
+  let vinculoGanadorId = cots[0].id;
   if (cots.length > 1) {
     const radio = document.querySelector(`input[name="sel-${reporteId}"]:checked`);
     if (!radio) { alert('Elige cuál cotización fue la seleccionada.'); return; }
-    seleccionadaId = radio.value;
+    vinculoGanadorId = radio.value;
   }
 
   const justificacionEl = document.getElementById(`just-${reporteId}`);
@@ -413,46 +433,51 @@ async function autorizarReporte(reporteId) {
     return;
   }
 
-  const elegida = cots.find(c => c.id === seleccionadaId);
-  const otras = cots.filter(c => c.id !== seleccionadaId);
+  const cantidadEl = document.getElementById(`cant-${reporteId}`);
+  const cantidadAutorizada = cantidadEl && cantidadEl.value !== '' ? parseFloat(cantidadEl.value) : null;
+
+  const ganador = cots.find(v => v.id === vinculoGanadorId);
+  const otros = cots.filter(v => v.id !== vinculoGanadorId);
   let ahorroPct = null;
-  if (otras.length && elegida.valor_cotizado != null) {
-    const validas = otras.map(c => c.valor_cotizado).filter(v => v != null);
+  if (otros.length && ganador.cotizacion && ganador.cotizacion.valor_cotizado != null) {
+    const validas = otros.map(v => v.cotizacion && v.cotizacion.valor_cotizado).filter(v => v != null);
     if (validas.length) {
       const mejorOtra = Math.min(...validas);
-      if (mejorOtra > 0) ahorroPct = Math.round(((mejorOtra - elegida.valor_cotizado) / mejorOtra) * 1000) / 10;
+      if (mejorOtra > 0) ahorroPct = Math.round(((mejorOtra - ganador.cotizacion.valor_cotizado) / mejorOtra) * 1000) / 10;
     }
   }
 
   const { data: { session } } = await sb.auth.getSession();
 
   await Promise.all([
-    sb.from('cotizaciones_proveedor').update({
-      seleccionada: true,
-      justificacion_seleccion: justificacion || null,
+    sb.from('cotizacion_reporte').update({
+      ganadora: true,
+      justificacion: justificacion || null,
       ahorro_pct: ahorroPct,
-      estado: 'usada',
-    }).eq('id', seleccionadaId),
-    ...otras.map(c => sb.from('cotizaciones_proveedor').update({ seleccionada: false }).eq('id', c.id)),
+    }).eq('id', vinculoGanadorId),
+    ...otros.map(v => sb.from('cotizacion_reporte').update({ ganadora: false }).eq('id', v.id)),
     sb.from('reportes_compra').update({
       estado: 'autorizado',
       autorizado_por: session.user.id,
       fecha_autorizacion: new Date().toISOString(),
       justificacion: justificacion || null,
+      cantidad_autorizada: cantidadAutorizada,
     }).eq('id', reporteId),
   ]);
 
   // Al autorizar, se crea automáticamente la solicitud de pedido (1.7) ya lista
-  // para que Diego (o quien suba pedidos a SAP) la encuentre en su bandeja —
-  // Carlos ya no tiene que "montarla" aparte, solo autorizar.
+  // para que Diego (o quien suba pedidos a SAP) la encuentre en su bandeja, con
+  // la cotización ganadora ya enlazada (cotizacion_id) — así, cuando se construya
+  // 1.7, Diego va a poder abrir/descargar ese mismo archivo directamente desde
+  // ahí, sin que Carlos tenga que reenviárselo por aparte.
   const { error: errSolicitud } = await sb.from('solicitudes_pedido').insert({
     origen: 'desde_1.2',
     reporte_compra_id: reporteId,
     producto: reporte.producto,
-    cantidad: reporte.cantidad,
-    proveedor: elegida.proveedor_nombre,
+    cantidad: cantidadAutorizada != null ? cantidadAutorizada : reporte.cantidad,
+    proveedor: ganador.cotizacion ? ganador.cotizacion.proveedor_nombre : null,
     sede_destino: reporte.sede,
-    cotizacion_id: seleccionadaId,
+    cotizacion_id: ganador.cotizacion_id,
     observacion: justificacion || null,
     estado: 'pendiente_subir',
     creado_por: session.user.id,

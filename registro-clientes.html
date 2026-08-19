@@ -155,6 +155,7 @@ function renderColabBar() {
 
 // ── ESTADO ────────────────────────────────────────────────────────────────────
 let colaboradora     = "";
+let colaboradoraSede = "";
 let cultivoSel       = null;
 let prodsSel         = [];
 let consentGeneral   = null;  // 'si' | 'no' | null (sin responder) — Autorización #1, obligatoria
@@ -464,6 +465,7 @@ function bind() {
         whatsapp:        consentComs,
         nota:            (document.getElementById("f-nota")?.value || "").trim() || null,
         colaboradora,
+        sede:            colaboradoraSede || null,
         acepta_datos:    consentGeneral === "si",
         datos_sensibles: consentSensibles === "si",
       });
@@ -535,6 +537,7 @@ function showMsg(txt, tipo) {
   }
 
   colaboradora = perfil.nombre;
+  colaboradoraSede = perfil.sede || "";
   renderColabBar();
   render();
 })();

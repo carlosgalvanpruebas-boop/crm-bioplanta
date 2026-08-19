@@ -28,6 +28,7 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:#f0f4f0;color:var(--
 .ind.ok b{color:var(--v2)}
 .ind.bajo b{color:#b8860b}
 .ind.agotado b{color:var(--vino)}
+.ind.sobre b{color:var(--v1)}
 .ind.sinclasificar b{color:#888}
 
 .filtros{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px;align-items:center}
@@ -51,6 +52,7 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:#f0f4f0;color:var(--
 .b-bajo{background:var(--beige);color:#8a5a00}
 .b-agotado{background:#fde3e2;color:var(--vino)}
 .b-sindatos{background:#eee;color:#999}
+.b-sobre{background:var(--v4);color:var(--v1)}
 .sede-sel{border:1.5px solid #d6e2d9;border-radius:8px;padding:6px 8px;font-size:11.5px;font-family:inherit}
 .sede-sel.sin{border-color:var(--vino);color:var(--vino)}
 .btn-mini{border:none;border-radius:7px;padding:8px 12px;font-size:11px;cursor:pointer;font-family:inherit;font-weight:700;background:var(--v2);color:#fff;white-space:nowrap}
@@ -100,14 +102,16 @@ function calcularEstado(p) {
   if (cantidad <= 0) return 'agotado';
   if (p.stock_minimo_sugerido === null || p.stock_minimo_sugerido === undefined) return 'sindatos';
   if (cantidad < Number(p.stock_minimo_sugerido)) return 'bajo';
+  if (p.stock_maximo_sugerido !== null && p.stock_maximo_sugerido !== undefined && cantidad > Number(p.stock_maximo_sugerido)) return 'sobre';
   return 'ok';
 }
 
 function badgeEstado(estado) {
   const map = {
-    ok: { txt: 'OK', cls: 'b-ok' },
+    ok: { txt: 'En rango', cls: 'b-ok' },
     bajo: { txt: 'Stock bajo', cls: 'b-bajo' },
     agotado: { txt: 'Agotado', cls: 'b-agotado' },
+    sobre: { txt: 'Sobre stock', cls: 'b-sobre' },
     sindatos: { txt: 'Sin datos suficientes', cls: 'b-sindatos' },
   }[estado];
   return `<span class="badge ${map.cls}">${map.txt}</span>`;
@@ -117,12 +121,14 @@ function renderIndicadores(lista) {
   const ok = lista.filter(p => calcularEstado(p) === 'ok').length;
   const bajo = lista.filter(p => calcularEstado(p) === 'bajo').length;
   const agotado = lista.filter(p => calcularEstado(p) === 'agotado').length;
+  const sobre = lista.filter(p => calcularEstado(p) === 'sobre').length;
   const sinSede = lista.filter(p => !p.sede).length;
   return `
     <div class="indicadores">
-      <div class="ind ok"><b>${ok}</b><span>Stock OK</span></div>
+      <div class="ind ok"><b>${ok}</b><span>En rango</span></div>
       <div class="ind bajo"><b>${bajo}</b><span>Stock bajo</span></div>
       <div class="ind agotado"><b>${agotado}</b><span>Agotados</span></div>
+      <div class="ind sobre"><b>${sobre}</b><span>Sobre stock</span></div>
       <div class="ind sinclasificar"><b>${sinSede}</b><span>Sin clasificar por sede</span></div>
     </div>
   `;
@@ -157,7 +163,8 @@ function render() {
             </div>
             <div class="f-datos">
               <div class="f-num"><b>${fmtNum(p.cantidad)}</b><span>${p.unidad || 'unid.'}</span></div>
-              <div class="f-num"><b>${p.stock_minimo_sugerido !== null && p.stock_minimo_sugerido !== undefined ? fmtNum(p.stock_minimo_sugerido) : '—'}</b><span>mínimo sug.</span></div>
+              <div class="f-num"><b>${p.stock_minimo_sugerido !== null && p.stock_minimo_sugerido !== undefined ? fmtNum(p.stock_minimo_sugerido) : '—'}</b><span>mínimo</span></div>
+              <div class="f-num"><b>${p.stock_maximo_sugerido !== null && p.stock_maximo_sugerido !== undefined ? fmtNum(p.stock_maximo_sugerido) : '—'}</b><span>máximo</span></div>
               ${badgeEstado(estado)}
               <select class="sede-sel ${sedeVal ? '' : 'sin'}" data-id="${p.id}" onchange="cambiarSede('${p.id}', this.value)">
                 <option value="" ${sedeVal === '' ? 'selected' : ''}>Sin clasificar</option>
@@ -174,7 +181,7 @@ function render() {
 
   document.getElementById('wrap').innerHTML = `
     <div class="aviso">
-      ℹ️ El stock actual y "última actualización" vienen de la sincronización con SAP (hoy solo hay datos de prueba, no el inventario real del día a día). El "mínimo sugerido" se calcula con el histórico real de ventas del trimestre (promedio diario × 7 días de margen + desviación estándar) — mientras no haya al menos 15 días de ventas registradas para un producto, se muestra "Sin datos suficientes" en vez de una alerta poco confiable. El campo "Sede" se está clasificando manualmente producto por producto, ya que la tabla real de SAP todavía no distingue sede.
+      ℹ️ El stock actual y "última actualización" vienen de la sincronización con SAP (hoy solo hay datos de prueba, no el inventario real del día a día). El rango de <b>mínimo y máximo</b> se calcula con el histórico real de ventas del trimestre, pensado para compras mensuales: <b>mínimo</b> = (venta promedio diaria × 7 días, lo que tarda en llegar el pedido) + desviación estándar; <b>máximo</b> = ese mínimo + un mes completo de venta (promedio × 30). Cuando el stock cae al mínimo o menos, ya toca comprar hasta llegar al máximo. Mientras no haya al menos 15 días de ventas registradas para un producto, se muestra "Sin datos suficientes" en vez de una alerta poco confiable. El campo "Sede" se está clasificando manualmente producto por producto, ya que la tabla real de SAP todavía no distingue sede.
     </div>
     ${renderIndicadores(productos)}
     <div class="filtros">
@@ -189,6 +196,7 @@ function render() {
       <button class="filtro-chip ${filtroEstado === 'ok' ? 'act' : ''}" onclick="filtroEstado='ok'; render()">OK</button>
       <button class="filtro-chip ${filtroEstado === 'bajo' ? 'act' : ''}" onclick="filtroEstado='bajo'; render()">Stock bajo</button>
       <button class="filtro-chip ${filtroEstado === 'agotado' ? 'act' : ''}" onclick="filtroEstado='agotado'; render()">Agotados</button>
+      <button class="filtro-chip ${filtroEstado === 'sobre' ? 'act' : ''}" onclick="filtroEstado='sobre'; render()">Sobre stock</button>
       <input type="text" placeholder="Buscar producto..." value="${filtroTexto}" oninput="filtroTexto=this.value; render()">
     </div>
     <div class="card">${filasHtml}</div>
@@ -252,10 +260,14 @@ async function cambiarSede(id, valor) {
   const stockPorCodigo = {};
   (stock || []).forEach(s => { stockPorCodigo[s.codigo_sap] = s; });
 
-  productos = (inv || []).map(p => ({
-    ...p,
-    stock_minimo_sugerido: stockPorCodigo[p.codigo_sap] ? stockPorCodigo[p.codigo_sap].stock_minimo_sugerido : null,
-  }));
+  productos = (inv || []).map(p => {
+    const s = stockPorCodigo[p.codigo_sap];
+    return {
+      ...p,
+      stock_minimo_sugerido: s ? s.stock_minimo_sugerido : null,
+      stock_maximo_sugerido: s ? s.stock_maximo_sugerido : null,
+    };
+  });
 
   render();
 })();

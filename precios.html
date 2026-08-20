@@ -26,14 +26,18 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--vbg);color:var
 
 .contador{font-size:12px;color:#777;margin-bottom:10px}
 
-.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:12px}
-.card{background:#fff;border-radius:14px;padding:16px;box-shadow:0 2px 8px rgba(0,0,0,.06)}
-.card .cat{font-size:10px;font-weight:700;color:var(--v2);text-transform:uppercase;letter-spacing:.3px}
-.card .nom{font-size:13.5px;font-weight:700;color:var(--v1);margin:6px 0 10px;line-height:1.35;min-height:36px}
-.card .precio{font-size:19px;font-weight:800;color:var(--v1)}
-.card .stock{font-size:11.5px;margin-top:6px;font-weight:700}
-.stock.si{color:#256d3b}
-.stock.no{color:var(--vino)}
+.tabla-wrap{background:#fff;border-radius:14px;box-shadow:0 2px 8px rgba(0,0,0,.06);overflow-x:auto}
+table{width:100%;border-collapse:collapse;font-size:13px}
+th,td{text-align:left;padding:11px 14px;border-bottom:1px solid var(--vbg)}
+th{color:var(--v2);font-size:10.5px;text-transform:uppercase;letter-spacing:.3px;background:var(--vlt);position:sticky;top:0}
+tr:last-child td{border-bottom:none}
+tr:hover td{background:var(--vlt)}
+td.cat{color:#777;font-size:11.5px}
+td.nom{font-weight:700;color:var(--v1)}
+td.precio{font-weight:800;color:var(--v1);white-space:nowrap}
+td.stock,th.stock{text-align:right;white-space:nowrap}
+.stock-si{color:#256d3b;font-weight:700;font-size:12px}
+.stock-no{color:var(--vino);font-weight:700;font-size:12px}
 
 .vacio{text-align:center;color:#999;padding:50px;font-size:13px}
 </style>
@@ -93,15 +97,27 @@ function render() {
     </div>
     <div class="contador">${filtrados.length} producto${filtrados.length === 1 ? '' : 's'}</div>
     ${filtrados.length ? `
-    <div class="grid">
-      ${filtrados.map(p => `
-        <div class="card">
-          <div class="cat">${p.categoria}</div>
-          <div class="nom">${p.producto}</div>
-          <div class="precio">${fmtMoneda(p.precio)}</div>
-          <div class="stock ${p.stock > 0 ? 'si' : 'no'}">${p.stock > 0 ? `✅ Disponible (${p.stock} und.)` : '❌ Sin stock'}</div>
-        </div>
-      `).join('')}
+    <div class="tabla-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Producto</th>
+            <th>Categoría</th>
+            <th class="stock">Precio</th>
+            <th class="stock">Disponibilidad</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${filtrados.map(p => `
+            <tr>
+              <td class="nom">${p.producto}</td>
+              <td class="cat">${p.categoria}</td>
+              <td class="precio">${fmtMoneda(p.precio)}</td>
+              <td class="stock">${p.stock > 0 ? `<span class="stock-si">✅ Disponible (${p.stock} und.)</span>` : '<span class="stock-no">❌ Sin stock</span>'}</td>
+            </tr>
+          `).join('')}
+        </tbody>
+      </table>
     </div>` : `<div class="vacio">No se encontraron productos con ese filtro.</div>`}
   `;
 

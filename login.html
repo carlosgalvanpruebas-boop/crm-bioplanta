@@ -21,12 +21,14 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:linear-gradient(160d
 .btn:disabled{opacity:.6}
 .msg{margin-top:14px;padding:9px 12px;border-radius:8px;font-size:13px;text-align:center;display:none}
 .msg.err{background:#fde8e8;color:#a00;display:block}
+.msg.ok{background:#e6f4ea;color:#256d3b;display:block}
 .back{display:block;text-align:center;margin-top:18px;font-size:12px;color:var(--v2);text-decoration:none}
+.olvide{display:block;text-align:center;margin-top:14px;font-size:12px;color:var(--v2);text-decoration:underline;background:none;border:none;cursor:pointer;font-family:inherit;width:100%}
 </style>
 </head>
 <body>
 
-<div class="box">
+<div class="box" id="box-login">
   <div class="logo-ico">🌱</div>
   <div class="brand">Equipo Agrotienda</div>
   <div class="sub">Ingresa con tu correo y contraseña</div>
@@ -43,8 +45,25 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:linear-gradient(160d
     <button class="btn" type="submit" id="btn-entrar">Entrar</button>
   </form>
   <div class="msg err" id="msg"></div>
+  <button class="olvide" id="btn-olvide" type="button">¿Olvidaste tu contraseña?</button>
 
   <a class="back" href="index.html">&larr; Volver</a>
+</div>
+
+<div class="box" id="box-recuperar" style="display:none">
+  <div class="logo-ico">🔑</div>
+  <div class="brand">Recuperar contraseña</div>
+  <div class="sub">Te enviamos un correo con un enlace para crear una nueva</div>
+
+  <form id="form-recuperar">
+    <div class="field">
+      <label>Correo</label>
+      <input type="email" id="email-recuperar" required autocomplete="username">
+    </div>
+    <button class="btn" type="submit" id="btn-recuperar">Enviar enlace</button>
+  </form>
+  <div class="msg" id="msg-recuperar" style="display:none"></div>
+  <button class="olvide" id="btn-volver-login" type="button">&larr; Volver a iniciar sesión</button>
 </div>
 
 <script>
@@ -83,6 +102,45 @@ form.addEventListener('submit', async (e) => {
   const { data: { session } } = await sb.auth.getSession();
   if (session) window.location.href = 'hub.html';
 })();
+
+// --- Recuperar contraseña ---
+const boxLogin = document.getElementById('box-login');
+const boxRecuperar = document.getElementById('box-recuperar');
+const formRecuperar = document.getElementById('form-recuperar');
+const btnRecuperar = document.getElementById('btn-recuperar');
+const msgRecuperar = document.getElementById('msg-recuperar');
+
+document.getElementById('btn-olvide').addEventListener('click', () => {
+  boxLogin.style.display = 'none';
+  boxRecuperar.style.display = 'block';
+  msgRecuperar.style.display = 'none';
+  formRecuperar.reset();
+});
+
+document.getElementById('btn-volver-login').addEventListener('click', () => {
+  boxRecuperar.style.display = 'none';
+  boxLogin.style.display = 'block';
+});
+
+formRecuperar.addEventListener('submit', async (e) => {
+  e.preventDefault();
+  btnRecuperar.disabled = true;
+  btnRecuperar.textContent = 'Enviando...';
+  msgRecuperar.style.display = 'none';
+
+  const email = document.getElementById('email-recuperar').value.trim();
+  const redirectTo = window.location.origin + '/restablecer-clave.html';
+  const { error } = await sb.auth.resetPasswordForEmail(email, { redirectTo });
+
+  btnRecuperar.disabled = false;
+  btnRecuperar.textContent = 'Enviar enlace';
+
+  // Se muestra el mismo mensaje exista o no esa cuenta, para no revelar
+  // qué correos sí están registrados en el sistema.
+  msgRecuperar.className = 'msg ok';
+  msgRecuperar.textContent = 'Si ese correo está registrado, te llegará un enlace para crear una nueva contraseña. Revisa también la carpeta de spam.';
+  msgRecuperar.style.display = 'block';
+});
 </script>
 
 </body>

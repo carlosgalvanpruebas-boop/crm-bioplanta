@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Agrotienda Bioplanta · Nueva contraseña</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+:root{--v1:#33513a;--v2:#4f7c5a;--v3:#84a38c;--v4:#a9c2af;--vbg:#eaefeb;--vlt:#f4f8f5;--texto:#1a2e1a}
+body{font-family:'Segoe UI',system-ui,sans-serif;background:linear-gradient(160deg,var(--v1),var(--v2) 60%);min-height:100vh;display:flex;align-items:center;justify-content:center;padding:20px}
+.box{background:#fff;border-radius:18px;padding:36px 32px;width:100%;max-width:360px;box-shadow:0 10px 30px rgba(0,0,0,.25)}
+.logo-ico{font-size:34px;text-align:center}
+.brand{font-size:16px;font-weight:800;color:var(--v1);text-align:center;margin-top:4px}
+.sub{font-size:12px;color:#666;text-align:center;margin-top:2px;margin-bottom:22px}
+.field{display:flex;flex-direction:column;gap:5px;margin-bottom:14px}
+.field label{font-size:12px;font-weight:600;color:var(--v2)}
+.field input{border:1.5px solid #b7e4c7;border-radius:8px;padding:11px 12px;font-size:14px;font-family:inherit;outline:none}
+.field input:focus{border-color:var(--v3);box-shadow:0 0 0 3px rgba(64,145,108,.12)}
+.btn{width:100%;margin-top:10px;padding:13px;background:linear-gradient(135deg,var(--v1),var(--v2));color:#fff;border:none;border-radius:10px;font-size:14px;font-weight:700;cursor:pointer;font-family:inherit}
+.btn:disabled{opacity:.6}
+.msg{margin-top:14px;padding:9px 12px;border-radius:8px;font-size:13px;text-align:center;display:none}
+.msg.err{background:#fde8e8;color:#a00;display:block}
+.msg.ok{background:#e6f4ea;color:#256d3b;display:block}
+.back{display:block;text-align:center;margin-top:18px;font-size:12px;color:var(--v2);text-decoration:none}
+</style>
+</head>
+<body>
+
+<div class="box" id="box">
+  <div class="logo-ico">🔑</div>
+  <div class="brand">Crear nueva contraseña</div>
+  <div class="sub" id="sub">Escribe tu nueva contraseña dos veces</div>
+
+  <form id="form-clave">
+    <div class="field">
+      <label>Nueva contraseña</label>
+      <input type="password" id="clave1" required minlength="6" autocomplete="new-password">
+    </div>
+    <div class="field">
+      <label>Repite la contraseña</label>
+      <input type="password" id="clave2" required minlength="6" autocomplete="new-password">
+    </div>
+    <button class="btn" type="submit" id="btn-guardar">Guardar contraseña</button>
+  </form>
+  <div class="msg" id="msg" style="display:none"></div>
+
+  <a class="back" href="login.html">&larr; Volver al inicio de sesión</a>
+</div>
+
+<script>
+const SUPABASE_URL = 'https://fpqogvxssnoarzgxcitc.supabase.co';
+const SUPABASE_KEY = 'sb_publishable_ccZF-8tenblFEah5lXfd3w_mYTHMtMC';
+const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+const form = document.getElementById('form-clave');
+const btn = document.getElementById('btn-guardar');
+const msg = document.getElementById('msg');
+const sub = document.getElementById('sub');
+
+let sesionRecuperacionLista = false;
+
+// El enlace del correo abre esta página con un token especial en la URL;
+// supabase-js lo procesa solo y dispara este evento cuando ya se puede
+// cambiar la contraseña.
+sb.auth.onAuthStateChange((event) => {
+  if (event === 'PASSWORD_RECOVERY') {
+    sesionRecuperacionLista = true;
+  }
+});
+
+form.addEventListener('submit', async (e) => {
+  e.preventDefault();
+  msg.style.display = 'none';
+
+  const clave1 = document.getElementById('clave1').value;
+  const clave2 = document.getElementById('clave2').value;
+
+  if (clave1 !== clave2) {
+    msg.className = 'msg err';
+    msg.textContent = 'Las dos contraseñas no coinciden.';
+    msg.style.display = 'block';
+    return;
+  }
+
+  btn.disabled = true;
+  btn.textContent = 'Guardando...';
+
+  const { error } = await sb.auth.updateUser({ password: clave1 });
+
+  btn.disabled = false;
+  btn.textContent = 'Guardar contraseña';
+
+  if (error) {
+    msg.className = 'msg err';
+    msg.textContent = 'No se pudo guardar: ' + error.message + '. Es posible que el enlace ya haya expirado — pide uno nuevo desde el login.';
+    msg.style.display = 'block';
+    return;
+  }
+
+  msg.className = 'msg ok';
+  msg.textContent = '✅ Contraseña actualizada. Ya puedes entrar al sistema.';
+  msg.style.display = 'block';
+  form.style.display = 'none';
+  setTimeout(() => { window.location.href = 'hub.html'; }, 1800);
+});
+
+// Si alguien llega aquí sin pasar por el enlace del correo (o el enlace
+// ya expiró), no habrá sesión de recuperación válida — se avisa en vez de
+// dejar que intente guardar una contraseña que de todos modos va a fallar.
+setTimeout(() => {
+  if (!sesionRecuperacionLista) {
+    sb.auth.getSession().then(({ data: { session } }) => {
+      if (!session) {
+        sub.textContent = 'Este enlace no es válido o ya expiró.';
+        form.style.display = 'none';
+      }
+    });
+  }
+}, 2500);
+</script>
+
+</body>
+</html>

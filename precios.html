@@ -1,149 +1,32 @@
-<!DOCTYPE html>
-<html lang="es">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Agrotienda Bioplanta · Precios</title>
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<style>
-*{box-sizing:border-box;margin:0;padding:0}
-:root{--v1:#33513a;--v2:#4f7c5a;--v3:#84a38c;--v4:#a9c2af;--vbg:#eaefeb;--vlt:#f4f8f5;--texto:#1a2e1a;--beige:#e6ceab;--vino:#984745}
-body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--vbg);color:var(--texto);min-height:100vh}
-.header{background:linear-gradient(135deg,var(--v1),var(--v2));color:#fff;padding:16px 20px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;box-shadow:0 2px 12px rgba(0,0,0,.2)}
-.hdr-l{display:flex;align-items:center;gap:10px}
-.logo-ico{font-size:26px}
-.brand{font-size:15px;font-weight:800}
-.brand-sub{font-size:11px;opacity:.8}
-.back{color:#fff;text-decoration:none;font-size:12px;background:rgba(255,255,255,.15);border:1px solid rgba(255,255,255,.3);padding:7px 16px;border-radius:20px}
+-- Fase 27a — Módulo 5 (Listado de precios público): agregar sede a listado_precios_publico
+--
+-- Problema que corrige: desde la Fase 25, `inventario` tiene una fila por artículo POR SEDE
+-- (codigo_sap, sede). La vista `listado_precios_publico` (Fase 23a) no exponía la columna
+-- `sede`, así que cada producto aparecía dos veces en precios.html, cada una con su propio
+-- precio (costo distinto por sede), sin ninguna explicación visible para el cliente.
+--
+-- Solución confirmada con Carlos (10-sep): en vez de fusionar en un solo precio promedio,
+-- precios.html va a tener un selector de sede — el cliente elige Chigorodó o Belén de Bajirá
+-- y ve el precio y stock reales de esa sede. Esta vista pasa a exponer `sede` para que el
+-- frontend pueda filtrar por ella.
+--
+-- Seguro de correr: es un `create or replace view` que solo AGREGA una columna (sede) a las
+-- que ya existían (codigo_sap, producto, categoria, stock, precio) — no quita ninguna, así
+-- que no rompe nada que ya dependa de esta vista. El `grant select` a `anon` ya otorgado en
+-- la Fase 23a se mantiene intacto (no hace falta volver a otorgarlo).
 
-.wrap{max-width:900px;margin:0 auto;padding:18px 18px 60px}
-.loading{text-align:center;padding:80px;color:#888}
-.aviso{background:var(--beige);color:var(--v1);border-radius:10px;padding:10px 16px;font-size:12px;margin-bottom:16px;line-height:1.5}
+create or replace view listado_precios_publico as
+select
+  i.codigo_sap,
+  i.producto,
+  i.categoria,
+  i.sede,
+  i.cantidad as stock,
+  round(i.costo_unit * (1 + m.margen_pct / 100.0), 0) as precio
+from inventario i
+join margenes_categoria m on m.categoria = i.categoria
+where i.sede is not null;
 
-.filtros{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:18px}
-.filtros input,.filtros select{border:1.5px solid #d6e2d9;border-radius:10px;padding:9px 12px;font-size:13px;font-family:inherit;background:#fff}
-.filtros input{flex:1;min-width:180px}
-
-.contador{font-size:12px;color:#777;margin-bottom:10px}
-
-.tabla-wrap{background:#fff;border-radius:14px;box-shadow:0 2px 8px rgba(0,0,0,.06);overflow-x:auto}
-table{width:100%;border-collapse:collapse;font-size:13px}
-th,td{text-align:left;padding:11px 14px;border-bottom:1px solid var(--vbg)}
-th{color:var(--v2);font-size:10.5px;text-transform:uppercase;letter-spacing:.3px;background:var(--vlt);position:sticky;top:0}
-tr:last-child td{border-bottom:none}
-tr:hover td{background:var(--vlt)}
-td.cat{color:#777;font-size:11.5px}
-td.nom{font-weight:700;color:var(--v1)}
-td.precio{font-weight:800;color:var(--v1);white-space:nowrap}
-td.stock,th.stock{text-align:right;white-space:nowrap}
-.stock-si{color:#256d3b;font-weight:700;font-size:12px}
-.stock-no{color:var(--vino);font-weight:700;font-size:12px}
-
-.vacio{text-align:center;color:#999;padding:50px;font-size:13px}
-</style>
-</head>
-<body>
-
-<div class="header">
-  <div class="hdr-l">
-    <div class="logo-ico">🏷️</div>
-    <div>
-      <div class="brand">Agrotienda Bioplanta</div>
-      <div class="brand-sub">Listado de precios</div>
-    </div>
-  </div>
-  <a class="back" href="index.html">← Volver</a>
-</div>
-
-<div class="wrap" id="wrap">
-  <div class="loading">Cargando...</div>
-</div>
-
-<script>
-const SUPABASE_URL = 'https://fpqogvxssnoarzgxcitc.supabase.co';
-const SUPABASE_KEY = 'sb_publishable_ccZF-8tenblFEah5lXfd3w_mYTHMtMC';
-const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
-
-let productos = [];
-let categoriaActiva = '';
-let busqueda = '';
-
-function fmtMoneda(n) {
-  return '$' + Math.round(n || 0).toLocaleString('es-CO');
-}
-
-function aplicarFiltros() {
-  return productos.filter(p => {
-    if (categoriaActiva && p.categoria !== categoriaActiva) return false;
-    if (busqueda && !p.producto.toLowerCase().includes(busqueda.toLowerCase())) return false;
-    return true;
-  });
-}
-
-function render() {
-  const categorias = [...new Set(productos.map(p => p.categoria))].sort();
-  const filtrados = aplicarFiltros().sort((a, b) => a.producto.localeCompare(b.producto));
-
-  document.getElementById('wrap').innerHTML = `
-    <div class="aviso">
-      ℹ️ Precio único de venta, igual para todos los clientes. El stock mostrado es el disponible actualmente entre las dos sedes (Chigorodó y Belén de Bajirá) — todavía no podemos separarlo por sede en esta pantalla.
-    </div>
-    <div class="filtros">
-      <input type="text" id="f-busqueda" placeholder="🔎 Buscar producto..." value="${busqueda}">
-      <select id="f-categoria">
-        <option value="">Todas las categorías</option>
-        ${categorias.map(c => `<option value="${c}" ${c === categoriaActiva ? 'selected' : ''}>${c}</option>`).join('')}
-      </select>
-    </div>
-    <div class="contador">${filtrados.length} producto${filtrados.length === 1 ? '' : 's'}</div>
-    ${filtrados.length ? `
-    <div class="tabla-wrap">
-      <table>
-        <thead>
-          <tr>
-            <th>Producto</th>
-            <th>Categoría</th>
-            <th class="stock">Precio</th>
-            <th class="stock">Disponibilidad</th>
-          </tr>
-        </thead>
-        <tbody>
-          ${filtrados.map(p => `
-            <tr>
-              <td class="nom">${p.producto}</td>
-              <td class="cat">${p.categoria}</td>
-              <td class="precio">${fmtMoneda(p.precio)}</td>
-              <td class="stock">${p.stock > 0 ? `<span class="stock-si">✅ Disponible (${p.stock} und.)</span>` : '<span class="stock-no">❌ Sin stock</span>'}</td>
-            </tr>
-          `).join('')}
-        </tbody>
-      </table>
-    </div>` : `<div class="vacio">No se encontraron productos con ese filtro.</div>`}
-  `;
-
-  document.getElementById('f-busqueda').addEventListener('input', (e) => {
-    busqueda = e.target.value;
-    render();
-    const campo = document.getElementById('f-busqueda');
-    campo.focus();
-    campo.setSelectionRange(campo.value.length, campo.value.length);
-  });
-  document.getElementById('f-categoria').addEventListener('change', (e) => {
-    categoriaActiva = e.target.value;
-    render();
-  });
-}
-
-(async () => {
-  const { data, error } = await sb.from('listado_precios_publico').select('*');
-  if (error) {
-    document.getElementById('wrap').innerHTML = `<div class="loading">No se pudo cargar el listado de precios. Intenta de nuevo más tarde.</div>`;
-    return;
-  }
-  productos = data || [];
-  render();
-})();
-</script>
-
-</body>
-</html>
+-- Verificación sugerida después de correr este script (debe mostrar 2 filas, una por sede,
+-- ya no una fila ambigua duplicada):
+-- select * from listado_precios_publico where codigo_sap = '<algún código real que estaba duplicado>';

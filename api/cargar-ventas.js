@@ -64,6 +64,20 @@ function fechaISO(valor) {
   return isNaN(d.getTime()) ? null : d.toISOString().slice(0, 10);
 }
 
+// Contado/Crédito (confirmado por Carlos, sep-2026): el reporte de SAP no
+// trae una columna directa de condición de pago, así que se infiere de la
+// diferencia entre "Fecha de contabilización" (la venta) y "Fecha de
+// vencimiento" (el plazo del crédito) — mismo día (0 de diferencia) es
+// Contado, cualquier plazo mayor es Crédito.
+function formaPagoDe(fechaContabISO, fechaVencISO) {
+  if (!fechaContabISO || !fechaVencISO) return null;
+  const a = new Date(fechaContabISO + 'T00:00:00');
+  const b = new Date(fechaVencISO + 'T00:00:00');
+  if (isNaN(a.getTime()) || isNaN(b.getTime())) return null;
+  const dias = Math.round((b - a) / 86400000);
+  return dias <= 0 ? 'Contado' : 'Crédito';
+}
+
 module.exports = async (req, res) => {
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Método no permitido' });
@@ -126,17 +140,20 @@ module.exports = async (req, res) => {
       const codigo_sap = (f.codigo_sap || '').toString().trim();
       if (codigo_sap && estaExcluido(codigo_sap, prefijosExcluidos)) { omitidosPorGrupo++; continue; }
 
+      const fechaContab = fechaISO(f.fecha);
+      const fechaVenc = fechaISO(f.fecha_vencimiento);
       const fila = {
         factura,
         producto,
         codigo_sap: codigo_sap || null,
-        fecha: fechaISO(f.fecha),
+        fecha: fechaContab,
         cantidad: numeroOr(f.cantidad, 0),
         valor: numeroOr(f.valor, 0),
         cliente: f.cliente ? String(f.cliente).trim() : null,
         cliente_nit: f.cliente_nit ? String(f.cliente_nit).trim() : null,
         vendedor: f.vendedor ? String(f.vendedor).trim() : null,
         sede: f.sede ? String(f.sede).trim() : null,
+        forma_pago: formaPagoDe(fechaContab, fechaVenc),
       };
       limpiasMap.set(`${factura}||${codigo_sap}`, fila);
     }

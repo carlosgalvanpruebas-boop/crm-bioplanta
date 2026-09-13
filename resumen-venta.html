@@ -89,6 +89,7 @@ const RANGOS = [
   { id: 'ayer', nombre: 'Ayer' },
   { id: 'semana', nombre: 'Esta semana' },
   { id: 'mes', nombre: 'Este mes' },
+  { id: 'elegir-mes', nombre: 'Elegir un mes' },
   { id: 'custom', nombre: 'Rango personalizado' },
 ];
 
@@ -98,6 +99,7 @@ let filtroRango = 'hoy';
 let filtroSede = 'todas';
 let customDesde = '';
 let customHasta = '';
+let mesElegido = `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}`;
 
 function fmtMoneda(n) {
   return '$' + Math.round(n || 0).toLocaleString('es-CO');
@@ -127,6 +129,13 @@ function rangoFechas() {
   if (filtroRango === 'ayer') { const a = sumarDias(hoy, -1); return [a, a]; }
   if (filtroRango === 'semana') return [inicioSemanaISO(), hoy];
   if (filtroRango === 'mes') return [inicioMesISO(), hoy];
+  if (filtroRango === 'elegir-mes') {
+    const [anio, mes] = mesElegido.split('-').map(Number);
+    const desde = `${anio}-${String(mes).padStart(2, '0')}-01`;
+    const ultimoDia = new Date(anio, mes, 0).getDate();
+    const hasta = `${anio}-${String(mes).padStart(2, '0')}-${String(ultimoDia).padStart(2, '0')}`;
+    return [desde, hasta];
+  }
   return [customDesde || hoy, customHasta || hoy];
 }
 
@@ -154,6 +163,21 @@ function agruparPorFactura(filas) {
   return [...map.values()].sort((a, b) => (b.fecha || '').localeCompare(a.fecha || '') || b.valor - a.valor);
 }
 
+function resumenPorSedeYFormaPago(filas) {
+  const map = new Map();
+  SEDES.forEach(s => map.set(s, { contado: 0, credito: 0, sinClasificar: 0 }));
+  filas.forEach(v => {
+    const sede = v.sede || '(sin sede)';
+    if (!map.has(sede)) map.set(sede, { contado: 0, credito: 0, sinClasificar: 0 });
+    const row = map.get(sede);
+    const valor = Number(v.valor) || 0;
+    if (v.forma_pago === 'Contado') row.contado += valor;
+    else if (v.forma_pago === 'Crédito') row.credito += valor;
+    else row.sinClasificar += valor;
+  });
+  return [...map.entries()].filter(([, r]) => r.contado || r.credito || r.sinClasificar);
+}
+
 function topProductos(filas, n = 10) {
   const map = new Map();
   filas.forEach(v => {
@@ -169,6 +193,10 @@ function render() {
   const totalVendido = filtradas.reduce((acc, v) => acc + (Number(v.valor) || 0), 0);
   const numVentas = facturas.length;
   const top = topProductos(filtradas);
+  const totalContado = filtradas.filter(v => v.forma_pago === 'Contado').reduce((acc, v) => acc + (Number(v.valor) || 0), 0);
+  const totalCredito = filtradas.filter(v => v.forma_pago === 'Crédito').reduce((acc, v) => acc + (Number(v.valor) || 0), 0);
+  const porSede = resumenPorSedeYFormaPago(filtradas);
+  const haySinClasificar = porSede.some(([, r]) => r.sinClasificar);
 
   // Cumplimiento de presupuesto: siempre sobre el mes calendario en curso y
   // TODAS las sedes (el presupuesto es a nivel general de la agrotienda,
@@ -183,7 +211,7 @@ function render() {
 
   document.getElementById('wrap').innerHTML = `
     <div class="aviso">
-      ℹ️ Solo lectura desde SAP (histórico cargado por Diego desde "Cargar información"). El detalle todavía no distingue Contado/Crédito — queda pendiente de confirmar el criterio.
+      ℹ️ Solo lectura desde SAP (histórico cargado por Diego desde "Cargar información"). Contado/Crédito se calcula según el plazo real de pago del reporte de SAP (mismo día de vencimiento = Contado, con plazo = Crédito) — las ventas cargadas antes de esta actualización no tienen ese dato hasta que se vuelva a subir el archivo original.
     </div>
 
     <div class="filtro-grupo">
@@ -193,6 +221,10 @@ function render() {
     ${filtroRango === 'custom' ? `
     <div class="rango-custom">
       <input type="date" id="f-desde" value="${customDesde}"> <span>a</span> <input type="date" id="f-hasta" value="${customHasta}">
+    </div>` : ''}
+    ${filtroRango === 'elegir-mes' ? `
+    <div class="rango-custom">
+      <input type="month" id="f-mes" value="${mesElegido}">
     </div>` : ''}
     <div class="filtro-grupo">
       <span class="filtro-label">Sede</span>
@@ -204,6 +236,8 @@ function render() {
       <div class="ind"><b>${fmtMoneda(totalVendido)}</b><span>Total vendido</span></div>
       <div class="ind"><b>${numVentas}</b><span>N.º de ventas (facturas)</span></div>
       <div class="ind"><b>${fmtMoneda(numVentas ? totalVendido / numVentas : 0)}</b><span>Ticket promedio</span></div>
+      <div class="ind"><b>${fmtMoneda(totalContado)}</b><span>Contado</span></div>
+      <div class="ind"><b>${fmtMoneda(totalCredito)}</b><span>Crédito</span></div>
     </div>
 
     <div class="card">
@@ -217,6 +251,27 @@ function render() {
           <span>Día ${diaDelMes} de ${diasDelMes} del mes</span>
         </div>
       ` : `<div class="vacio">No hay presupuesto cargado para este mes todavía.</div>`}
+    </div>
+
+    <div class="card">
+      <h3>💵 Contado vs Crédito por sede</h3>
+      <div class="sub">Según el rango y sede seleccionados arriba</div>
+      ${porSede.length ? `
+      <table>
+        <thead><tr><th>Sede</th><th class="num">Contado</th><th class="num">Crédito</th><th class="num">Total</th></tr></thead>
+        <tbody>
+          ${porSede.map(([sede, r]) => `
+            <tr>
+              <td>${sede}</td>
+              <td class="num">${fmtMoneda(r.contado)}</td>
+              <td class="num">${fmtMoneda(r.credito)}</td>
+              <td class="num">${fmtMoneda(r.contado + r.credito + r.sinClasificar)}</td>
+            </tr>
+          `).join('')}
+        </tbody>
+      </table>
+      ${haySinClasificar ? `<div class="nota-mas">Algunas ventas del total no tienen Contado/Crédito clasificado (se cargaron antes de esta actualización) — súbelas de nuevo desde Cargar información → Ventas para completarlas.</div>` : ''}
+      ` : `<div class="vacio">No hay ventas en ese rango.</div>`}
     </div>
 
     <div class="card">
@@ -259,6 +314,7 @@ function render() {
   });
   document.getElementById('f-desde')?.addEventListener('change', (e) => { customDesde = e.target.value; render(); });
   document.getElementById('f-hasta')?.addEventListener('change', (e) => { customHasta = e.target.value; render(); });
+  document.getElementById('f-mes')?.addEventListener('change', (e) => { mesElegido = e.target.value; render(); });
 }
 
 (async () => {
@@ -283,7 +339,7 @@ function render() {
   }
 
   const hoy = new Date();
-  const { data: dataVentas, error: errVentas } = await sb.from('ventas').select('fecha,factura,producto,cliente,valor,sede').order('fecha', { ascending: false }).limit(20000);
+  const { data: dataVentas, error: errVentas } = await sb.from('ventas').select('fecha,factura,producto,cliente,valor,sede,forma_pago').order('fecha', { ascending: false }).limit(20000);
   if (errVentas) {
     document.getElementById('wrap').innerHTML = '<div class="loading">No se pudo cargar el histórico de ventas: ' + errVentas.message + '</div>';
     return;

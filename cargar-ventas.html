@@ -83,6 +83,7 @@ const ALIAS = {
   // del crédito — a propósito NO se usa esa para "fecha".
   factura: ['numero de documento', 'número de documento', 'numero de factura', 'número de factura', 'no. factura', 'factura', 'documento'],
   fecha: ['fecha de contabilizacion', 'fecha de contabilización', 'fecha de factura', 'fecha factura', 'fecha venta', 'fecha'],
+  fecha_vencimiento: ['fecha de vencimiento', 'fecha vencimiento'],
   codigo_sap: ['itemcode', 'numero de articulo', 'número de artículo', 'codigo sap', 'código sap', 'codigo', 'código', 'item code'],
   producto: ['dscription', 'descripcion', 'descripción', 'nombre', 'producto', 'item name'],
   cantidad: ['quantity', 'cantidad vendida', 'cantidad', 'unidades'],
@@ -129,7 +130,7 @@ function render() {
 
   document.getElementById('wrap').innerHTML = `
     <div class="aviso">
-      ℹ️ Esta pantalla <b>agrega</b> al histórico de ventas — no reemplaza ni borra nada (a diferencia de la carga de inventario). Si subes el mismo archivo dos veces, o rangos de fecha que se solapan, las líneas repetidas (misma factura + mismo artículo) se actualizan, no se duplican. Los artículos de grupos ya marcados como "no son de Agrotienda" (ver carga de inventario) se excluyen automáticamente, igual que las filas canceladas y las de otras áreas del centro de costo (OcrCode2 distinto de "Comercial"). La sede se toma del centro de costo real de SAP (Carepa se trata como Chigorodó, por el traslado).
+      ℹ️ Esta pantalla <b>agrega</b> al histórico de ventas — no reemplaza ni borra nada (a diferencia de la carga de inventario). Si subes el mismo archivo dos veces, o rangos de fecha que se solapan, las líneas repetidas (misma factura + mismo artículo) se actualizan, no se duplican. Los artículos de grupos ya marcados como "no son de Agrotienda" (ver carga de inventario) se excluyen automáticamente, igual que las filas canceladas y las de otras áreas del centro de costo (OcrCode2 distinto de "Comercial"). La sede se toma del centro de costo real de SAP (Carepa se trata como Chigorodó, por el traslado). Contado/Crédito se calcula solo: mismo día entre fecha de contabilización y fecha de vencimiento = Contado, con plazo = Crédito.
     </div>
     <div class="card">
       <h3>1. Selecciona el archivo Excel</h3>
@@ -183,6 +184,7 @@ function bind() {
       producto: String(row[mapa.producto] || '').trim(),
       codigo_sap: mapa.codigo_sap ? String(row[mapa.codigo_sap] || '').trim() : '',
       fecha: mapa.fecha ? row[mapa.fecha] : null,
+      fecha_vencimiento: mapa.fecha_vencimiento ? row[mapa.fecha_vencimiento] : null,
       cantidad: mapa.cantidad ? row[mapa.cantidad] : 0,
       valor: mapa.valor ? row[mapa.valor] : 0,
       cliente: mapa.cliente ? String(row[mapa.cliente] || '').trim() : null,

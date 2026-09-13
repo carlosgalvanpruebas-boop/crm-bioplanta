@@ -122,6 +122,7 @@ module.exports = async (req, res) => {
         cliente: f.cliente ? String(f.cliente).trim() : null,
         cliente_nit: f.cliente_nit ? String(f.cliente_nit).trim() : null,
         vendedor: f.vendedor ? String(f.vendedor).trim() : null,
+        sede: f.sede ? String(f.sede).trim() : null,
       };
       limpiasMap.set(`${factura}||${codigo_sap}`, fila);
     }

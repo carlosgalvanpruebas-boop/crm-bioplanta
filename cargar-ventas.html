@@ -90,7 +90,20 @@ const ALIAS = {
   cliente: ['nombre de cliente/proveedor', 'nombre del cliente', 'razon social', 'razón social', 'cliente'],
   cliente_nit: ['codigo de cliente/proveedor', 'código de cliente/proveedor', 'nit', 'identificacion', 'identificación', 'cedula/nit', 'cédula/nit'],
   vendedor: ['empleado de ventas', 'asesor', 'vendedor'],
+  ocr_code: ['ocrcode', 'centro de costo', 'centro de costo (ocrcode)'],
+  ocr_code2: ['ocrcode2'],
+  cancelado: ['cancelado'],
 };
+
+// El centro de costo (OcrCode) de SAP identifica la sede real de la venta.
+// "CAREPA" es el nombre antiguo de la sede de Chigorodó antes del traslado
+// (confirmado por Carlos, sep-2026) -- se trata igual que CHIGOROD.
+function sedeDeCentroCosto(valor) {
+  const v = String(valor || '').trim().toUpperCase();
+  if (v === 'CHIGOROD' || v === 'CAREPA') return 'Chigorodó';
+  if (v === 'BAJIRA' || v === 'BAJIRÁ') return 'Belén de Bajirá';
+  return null;
+}
 function normaliza(s) {
   return String(s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').trim();
 }
@@ -116,7 +129,7 @@ function render() {
 
   document.getElementById('wrap').innerHTML = `
     <div class="aviso">
-      ℹ️ Esta pantalla <b>agrega</b> al histórico de ventas — no reemplaza ni borra nada (a diferencia de la carga de inventario). Si subes el mismo archivo dos veces, o rangos de fecha que se solapan, las líneas repetidas (misma factura + mismo artículo) se actualizan, no se duplican. Los artículos de grupos ya marcados como "no son de Agrotienda" (ver carga de inventario) se excluyen automáticamente.
+      ℹ️ Esta pantalla <b>agrega</b> al histórico de ventas — no reemplaza ni borra nada (a diferencia de la carga de inventario). Si subes el mismo archivo dos veces, o rangos de fecha que se solapan, las líneas repetidas (misma factura + mismo artículo) se actualizan, no se duplican. Los artículos de grupos ya marcados como "no son de Agrotienda" (ver carga de inventario) se excluyen automáticamente, igual que las filas canceladas y las de otras áreas del centro de costo (OcrCode2 distinto de "Comercial"). La sede se toma del centro de costo real de SAP (Carepa se trata como Chigorodó, por el traslado).
     </div>
     <div class="card">
       <h3>1. Selecciona el archivo Excel</h3>
@@ -175,7 +188,19 @@ function bind() {
       cliente: mapa.cliente ? String(row[mapa.cliente] || '').trim() : null,
       cliente_nit: mapa.cliente_nit ? String(row[mapa.cliente_nit] || '').trim() : null,
       vendedor: mapa.vendedor ? String(row[mapa.vendedor] || '').trim() : null,
-    })).filter(f => f.factura && f.producto);
+      sede: mapa.ocr_code ? sedeDeCentroCosto(row[mapa.ocr_code]) : null,
+      _ocrCode2: mapa.ocr_code2 ? String(row[mapa.ocr_code2] || '').trim().toUpperCase() : '',
+      _cancelado: mapa.cancelado ? String(row[mapa.cancelado] || '').trim().toUpperCase() : '',
+    }))
+      .filter(f => f.factura && f.producto)
+      // Solo filas canceladas explícitamente se excluyen (si no viene la
+      // columna, se asume válida, para no romper archivos que no la traigan).
+      .filter(f => !f._cancelado || f._cancelado === 'N')
+      // OcrCode2 = 'COMERCIA' es el área comercial (la agrotienda); otras
+      // áreas (administrativa, agronomía, industrial, etc.) comparten el
+      // mismo SAP pero no son ventas de la agrotienda.
+      .filter(f => !f._ocrCode2 || f._ocrCode2 === 'COMERCIA')
+      .map(({ _ocrCode2, _cancelado, ...resto }) => resto);
 
     render();
   });

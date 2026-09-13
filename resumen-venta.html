@@ -42,7 +42,7 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:#f0f4f0;color:var(--
 
 .presu-barra{background:var(--vbg);border-radius:10px;height:14px;overflow:hidden;margin:10px 0}
 .presu-fill{background:var(--v2);height:100%;border-radius:10px 0 0 10px;transition:width .3s}
-.presu-fill.pasado{background:var(--vino)}
+.presu-fill.superado{background:var(--v1)}
 .presu-datos{display:flex;justify-content:space-between;font-size:12px;color:#666;flex-wrap:wrap;gap:6px}
 .presu-pct{font-size:26px;font-weight:800;color:var(--v1)}
 
@@ -211,7 +211,7 @@ function render() {
       <div class="sub">Acumulado de todas las sedes, mes en curso — el presupuesto es a nivel general, no por sede</div>
       ${presupuestoMes ? `
         <div class="presu-pct">${pct}%</div>
-        <div class="presu-barra"><div class="presu-fill ${pct > 100 ? 'pasado' : ''}" style="width:${Math.min(pct, 100)}%"></div></div>
+        <div class="presu-barra"><div class="presu-fill ${pct >= 100 ? 'superado' : ''}" style="width:${Math.min(pct, 100)}%"></div></div>
         <div class="presu-datos">
           <span>${fmtMoneda(totalMes)} vendido de ${fmtMoneda(presupuestoMes.monto)} presupuestados</span>
           <span>Día ${diaDelMes} de ${diasDelMes} del mes</span>

@@ -19,6 +19,8 @@ Sitio interno + publico para Agrotienda Bioplanta (dos sedes: Chigorodo y Belen 
 - CREATE OR REPLACE VIEW en Postgres solo permite agregar columnas al final de la lista, nunca insertarlas en medio ni reordenarlas (error 42P16).
 - Antes de escribir RLS o insertar en una tabla real ya existente (heredada de un desarrollo anterior en Firebase/Netlify), revisar information_schema.columns y tambien los CHECK constraints con pg_get_constraintdef -- varias tablas reales (tareas, por ejemplo) tienen reglas mas estrictas de lo asumido.
 - El repo es publico: se puede leer cualquier archivo actual con curl https://raw.githubusercontent.com/carlosgalvanpruebas-boop/crm-bioplanta/<rama-o-commit>/<archivo> sin credenciales.
+- "CAREPA" como centro de costo (OcrCode) en ventas es el nombre antiguo de la sede de Chigorodo antes de un traslado (confirmado por Carlos, sep-2026) -- se mapea a 'Chigorodo', no es una tercera sede ni hay que excluirlo.
+- Los scripts SQL que Carlos debe correr manualmente en el SQL Editor de Supabase (no hay ejecucion directa de SQL disponible desde aqui) viven en sql/, uno por fase (ver esquema-supabase.md en el Project de claude.ai para el historial completo de fases anteriores, que no se guardaron como archivos).
 
 ## Estado (ver esquema-supabase.md y vision-general-proyecto.md en el Project de claude.ai para el detalle completo)
 - Modulo 1 (Mostrador) y 2 (Administrativo): funcionales en produccion, salvo 1.3 y 2.3 (backend listo, falta pantalla).

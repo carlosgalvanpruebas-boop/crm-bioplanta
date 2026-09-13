@@ -104,6 +104,21 @@ function prefijoDe(codigo) {
   const m = String(codigo || '').match(/^([A-Za-z]+)/);
   return m ? m[1].toUpperCase() : null;
 }
+
+// Igual que en el cargador de ventas: un código puede excluirse por
+// coincidencia EXACTA (ej. "SER_04", un sub-código puntual dentro de
+// un grupo que en general SÍ se debe cargar) o por prefijo de letras
+// (ej. "TUZAP" — un grupo completo). Sin esto, escribir "SER_04" en
+// "agregar exclusión manual" no tendría ningún efecto, porque su
+// prefijo de letras ("SER") también cubre otros códigos que no se
+// quieren excluir (SER_01, SER_05, SER_10, SER_12...).
+function estaExcluido(codigo, excluidosSet) {
+  const c = String(codigo || '').trim().toUpperCase();
+  if (!c) return false;
+  if (excluidosSet.has(c)) return true;
+  const p = prefijoDe(c);
+  return !!p && excluidosSet.has(p);
+}
 function categoriaPorPrefijo(codigo) {
   const p = prefijoDe(codigo);
   return p ? (MAPA_PREFIJO[p] || null) : null;
@@ -167,7 +182,7 @@ function resumenPorPrefijo(lista) {
 function render() {
   const resumen = resumenPorPrefijo(filas);
   const prefijosOrdenados = Object.keys(resumen).sort((a, b) => resumen[b].count - resumen[a].count);
-  const filasIncluidas = filas.filter(f => !checkboxExcluir.has(prefijoDe(f.codigo_sap)));
+  const filasIncluidas = filas.filter(f => !estaExcluido(f.codigo_sap, checkboxExcluir));
   const preview = filasIncluidas.slice(0, 5);
   const cols = preview.length ? Object.keys(preview[0]) : [];
 
@@ -338,7 +353,7 @@ function bind() {
     const btn = document.getElementById('btn-confirmar');
     btn.disabled = true;
     btn.textContent = 'Cargando...';
-    const filasAEnviar = filas.filter(f => !checkboxExcluir.has(prefijoDe(f.codigo_sap)));
+    const filasAEnviar = filas.filter(f => !estaExcluido(f.codigo_sap, checkboxExcluir));
     const omitidos = filas.length - filasAEnviar.length;
     try {
       const resp = await fetch('/api/cargar-inventario', {

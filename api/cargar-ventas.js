@@ -30,6 +30,20 @@ function prefijoDe(codigo) {
   return m ? m[1].toUpperCase() : '';
 }
 
+// Un código queda excluido si coincide EXACTO con algo guardado en
+// `sap_prefijos_excluidos` (ej. "SER_04", para un sub-código puntual)
+// o si su prefijo de letras coincide (ej. "TUZAP", "ACECRUDO" — grupos
+// completos). Se necesitan las dos formas: el prefijo de letras solo
+// no alcanza para distinguir sub-códigos de un mismo grupo (SER_04 vs
+// SER_01, SER_05, SER_10, SER_12, que NO deben excluirse).
+function estaExcluido(codigo, excluidosSet) {
+  const c = (codigo || '').toString().trim().toUpperCase();
+  if (!c) return false;
+  if (excluidosSet.has(c)) return true;
+  const p = prefijoDe(c);
+  return !!p && excluidosSet.has(p);
+}
+
 function numeroOr(valor, porDefecto) {
   if (valor === undefined || valor === null || valor === '') return porDefecto;
   if (typeof valor === 'number') return valor;
@@ -110,7 +124,7 @@ module.exports = async (req, res) => {
       if (!factura || !producto) { sinFacturaOProducto++; continue; }
 
       const codigo_sap = (f.codigo_sap || '').toString().trim();
-      if (codigo_sap && prefijosExcluidos.has(prefijoDe(codigo_sap))) { omitidosPorGrupo++; continue; }
+      if (codigo_sap && estaExcluido(codigo_sap, prefijosExcluidos)) { omitidosPorGrupo++; continue; }
 
       const fila = {
         factura,

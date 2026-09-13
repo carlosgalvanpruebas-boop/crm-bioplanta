@@ -129,6 +129,7 @@ module.exports = async (req, res) => {
     const prefijosExcluidos = new Set((excluidosRows || []).map(r => (r.prefijo || '').toUpperCase()));
 
     let omitidosPorGrupo = 0;
+    let omitidosSinCodigo = 0;
     const limpiasMap = new Map(); // clave factura||codigo_sap -> fila (colapsa duplicados del mismo archivo)
     let sinFacturaOProducto = 0;
 
@@ -138,7 +139,12 @@ module.exports = async (req, res) => {
       if (!factura || !producto) { sinFacturaOProducto++; continue; }
 
       const codigo_sap = (f.codigo_sap || '').toString().trim();
-      if (codigo_sap && estaExcluido(codigo_sap, prefijosExcluidos)) { omitidosPorGrupo++; continue; }
+      // Una venta real de mostrador siempre trae código de artículo. Las
+      // pocas líneas que llegan sin código (ej. "CAMIONETA DUSTER LRQ-524",
+      // "TRANSPORTE DE REPUESTOS CABLE VÍA") son movimientos sueltos de
+      // SAP que no son productos de la agrotienda (Carlos, sep-2026).
+      if (!codigo_sap) { omitidosSinCodigo++; continue; }
+      if (estaExcluido(codigo_sap, prefijosExcluidos)) { omitidosPorGrupo++; continue; }
 
       const fechaContab = fechaISO(f.fecha);
       const fechaVenc = fechaISO(f.fecha_vencimiento);
@@ -159,7 +165,7 @@ module.exports = async (req, res) => {
     }
 
     const limpios = [...limpiasMap.values()];
-    const duplicadosColapsados = filas.length - sinFacturaOProducto - omitidosPorGrupo - limpios.length;
+    const duplicadosColapsados = filas.length - sinFacturaOProducto - omitidosPorGrupo - omitidosSinCodigo - limpios.length;
 
     if (!limpios.length) {
       return res.status(400).json({ error: 'Ninguna fila tenía factura y producto válidos' });
@@ -175,13 +181,14 @@ module.exports = async (req, res) => {
       modulo: 'ventas',
       registros: limpios.length,
       status: 'ok',
-      mensaje: `Cargado por ${perfil.nombre}: ${limpios.length} líneas procesadas, ${omitidosPorGrupo} omitidas por grupos excluidos, ${duplicadosColapsados} duplicadas dentro del mismo archivo, ${sinFacturaOProducto} sin factura/producto válidos`,
+      mensaje: `Cargado por ${perfil.nombre}: ${limpios.length} líneas procesadas, ${omitidosPorGrupo} omitidas por grupos excluidos, ${omitidosSinCodigo} omitidas por no traer código SAP, ${duplicadosColapsados} duplicadas dentro del mismo archivo, ${sinFacturaOProducto} sin factura/producto válidos`,
     });
 
     return res.status(200).json({
       ok: true,
       procesadas: limpios.length,
       omitidosPorGrupo,
+      omitidosSinCodigo,
       duplicadosColapsados,
       sinFacturaOProducto,
     });

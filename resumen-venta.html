@@ -339,12 +339,27 @@ function render() {
   }
 
   const hoy = new Date();
-  const { data: dataVentas, error: errVentas } = await sb.from('ventas').select('fecha,factura,producto,cliente,valor,sede,forma_pago').order('fecha', { ascending: false }).limit(20000);
+  // Supabase/PostgREST limita cuantas filas devuelve UNA sola consulta
+  // (tope del proyecto, tipicamente 1000), sin importar el .limit() que se
+  // pida desde el cliente -- por eso hay que traer todo en paginas con
+  // .range() hasta que una pagina vuelva incompleta, en vez de un solo
+  // .limit(20000) que se quedaba corto y perdia meses completos.
+  let ventasCargadas = [];
+  let errVentas = null;
+  const PAGINA = 1000;
+  let desde = 0;
+  while (true) {
+    const { data, error } = await sb.from('ventas').select('fecha,factura,producto,cliente,valor,sede,forma_pago').order('fecha', { ascending: false }).range(desde, desde + PAGINA - 1);
+    if (error) { errVentas = error; break; }
+    ventasCargadas = ventasCargadas.concat(data || []);
+    if (!data || data.length < PAGINA) break;
+    desde += PAGINA;
+  }
   if (errVentas) {
     document.getElementById('wrap').innerHTML = '<div class="loading">No se pudo cargar el histórico de ventas: ' + errVentas.message + '</div>';
     return;
   }
-  ventas = dataVentas || [];
+  ventas = ventasCargadas;
 
   const { data: presu } = await sb.from('presupuesto_venta').select('*').eq('anio', hoy.getFullYear()).eq('mes', hoy.getMonth() + 1).maybeSingle();
   presupuestoMes = presu || null;

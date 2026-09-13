@@ -42,6 +42,7 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:#f0f4f0;color:var(--
 .f-info{flex:1;min-width:200px}
 .f-prod{font-size:14px;font-weight:800;color:var(--v1)}
 .f-meta{font-size:11.5px;color:#888;margin-top:2px}
+.f-sedes{font-size:11px;color:#8a8a8a;margin-top:2px}
 .f-datos{display:flex;gap:16px;align-items:center;flex-wrap:wrap}
 .f-num{text-align:center}
 .f-num b{display:block;font-size:15px}
@@ -81,6 +82,8 @@ const SUPABASE_URL = 'https://fpqogvxssnoarzgxcitc.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_ccZF-8tenblFEah5lXfd3w_mYTHMtMC';
 const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
+const SEDES = ['Chigorodó', 'Belén de Bajirá'];
+
 let esSuperAdmin = false;
 let puedeEditar = false;
 let productos = [];
@@ -88,7 +91,7 @@ let filtroEstado = 'todos';
 let filtroSede = 'todas';
 let filtroTexto = '';
 let orden = 'cobertura';
-let editandoId = null;
+let editandoCodigo = null;
 
 function fmtFecha(iso) {
   if (!iso) return '—';
@@ -97,6 +100,10 @@ function fmtFecha(iso) {
 function fmtNum(n) {
   if (n === null || n === undefined) return '—';
   return Number(n).toLocaleString('es-CO', { maximumFractionDigits: 1 });
+}
+// Convierte un codigo_sap en un id de HTML seguro (por si trae espacios u otros caracteres)
+function idSafe(s) {
+  return String(s).replace(/[^A-Za-z0-9_-]/g, '_');
 }
 
 function calcularEstado(p) {
@@ -135,8 +142,7 @@ function renderIndicadores(lista) {
 function aplicarFiltros() {
   let lista = productos.filter(p => {
     if (filtroEstado !== 'todos' && calcularEstado(p) !== filtroEstado) return false;
-    if (filtroSede === 'sinclasificar' && p.sede) return false;
-    if (filtroSede !== 'todas' && filtroSede !== 'sinclasificar' && p.sede !== filtroSede) return false;
+    if (filtroSede !== 'todas' && p.sedes[filtroSede] === undefined) return false;
     if (filtroTexto && !(p.producto || '').toLowerCase().includes(filtroTexto.toLowerCase())) return false;
     return true;
   });
@@ -157,12 +163,13 @@ function badgeEstadoTexto(estado) {
 }
 
 function filaEditar(p) {
+  const idm = idSafe(p.codigo_sap);
   return `
     <div class="editar-box">
-      <input type="number" id="edit-min-${p.id}" placeholder="Mínimo" value="${p.stock_minimo_manual !== null && p.stock_minimo_manual !== undefined ? p.stock_minimo_manual : ''}">
-      <input type="number" id="edit-max-${p.id}" placeholder="Máximo" value="${p.stock_maximo_manual !== null && p.stock_maximo_manual !== undefined ? p.stock_maximo_manual : ''}">
-      <button class="btn-mini" onclick="guardarManual('${p.id}')">💾</button>
-      <button class="btn-mini editar" onclick="editandoId=null; render()">✕</button>
+      <input type="number" id="edit-min-${idm}" placeholder="Mínimo" value="${p.stock_minimo_manual !== null && p.stock_minimo_manual !== undefined ? p.stock_minimo_manual : ''}">
+      <input type="number" id="edit-max-${idm}" placeholder="Máximo" value="${p.stock_maximo_manual !== null && p.stock_maximo_manual !== undefined ? p.stock_maximo_manual : ''}">
+      <button class="btn-mini" onclick="guardarManual('${p.codigo_sap}')">💾</button>
+      <button class="btn-mini editar" onclick="editandoCodigo=null; render()">✕</button>
     </div>
   `;
 }
@@ -179,21 +186,23 @@ function render() {
           : null;
         const minTiene = p.stock_minimo_manual !== null && p.stock_minimo_manual !== undefined;
         const maxTiene = p.stock_maximo_manual !== null && p.stock_maximo_manual !== undefined;
+        const desgloseSedes = SEDES.map(s => `${s}: ${p.sedes[s] !== undefined ? fmtNum(p.sedes[s]) : '—'}`).join(' · ');
         return `
           <div class="fila">
             <div class="f-info">
               <div class="f-prod">${p.producto || '(sin nombre)'}</div>
-              <div class="f-meta">${p.categoria || 'Sin categoría'} · ${p.sede || 'Sin clasificar'} · Actualizado: ${fmtFecha(p.actualizado_en)}</div>
+              <div class="f-meta">${p.categoria || 'Sin categoría'} · Actualizado: ${fmtFecha(p.actualizado_en)}</div>
+              <div class="f-sedes">📍 ${desgloseSedes}</div>
             </div>
             <div class="f-datos">
-              <div class="f-num"><b>${fmtNum(p.cantidad)}</b><span>${p.unidad || 'unid.'}</span></div>
+              <div class="f-num"><b>${fmtNum(p.cantidad)}</b><span>${p.unidad || 'unid.'} (total)</span></div>
               <div class="f-num"><b>${fmtNum(p.ventas30)}</b><span>venta 30d</span></div>
               <div class="f-num"><b>${p.coberturaDias !== null ? fmtNum(p.coberturaDias) + 'd' : '—'}</b><span>cobertura</span></div>
               <div class="f-num"><b>${fmtNum(p.minimoEfectivo)}</b>${minTiene ? '<span class="manual-tag">manual</span>' : '<span>mínimo</span>'}</div>
               <div class="f-num"><b>${fmtNum(p.maximoEfectivo)}</b>${maxTiene ? '<span class="manual-tag">manual</span>' : '<span>máximo</span>'}</div>
               ${badgeEstado(estado)}
               ${urlReporte ? `<a class="btn-mini" href="${urlReporte}">📩 Reportar</a>` : ''}
-              ${puedeEditar ? (editandoId === p.id ? filaEditar(p) : `<button class="btn-mini editar" onclick="editandoId='${p.id}'; render()">✏️ Ajustar</button>`) : ''}
+              ${puedeEditar ? (editandoCodigo === p.codigo_sap ? filaEditar(p) : `<button class="btn-mini editar" onclick="editandoCodigo='${p.codigo_sap}'; render()">✏️ Ajustar</button>`) : ''}
             </div>
           </div>
         `;
@@ -202,16 +211,14 @@ function render() {
 
   document.getElementById('wrap').innerHTML = `
     <div class="aviso">
-      ℹ️ "Venta 30d" y "cobertura" vienen del histórico real de ventas (hoy solo hay datos de prueba, no el día a día real). Cobertura = días que dura el stock actual al ritmo de venta de los últimos 30 días — se marca "Próximo a agotarse" cuando quedan 7 días o menos (el mismo tiempo de entrega usado en 1.5). El mínimo/máximo mostrado es el calculado automáticamente en 1.5, salvo que ${puedeEditar ? 'lo ajustes manualmente con el botón "✏️ Ajustar" (útil para productos estacionales o casos especiales)' : 'alguien con Módulo 2 completo lo haya ajustado manualmente'}.
+      ℹ️ "Venta 30d" y "cobertura" vienen del histórico real de ventas (hoy solo hay datos de prueba, no el día a día real). Cobertura = días que dura el stock actual al ritmo de venta de los últimos 30 días — se marca "Próximo a agotarse" cuando quedan 7 días o menos (el mismo tiempo de entrega usado en 1.5). Cada producto tiene ahora una fila de inventario por sede: la cantidad, el estado y el mínimo/máximo se calculan sobre el <b>total combinado de ambas sedes</b> (igual que en 1.5), y abajo de cada producto se muestra el desglose real por sede. El mínimo/máximo mostrado es el calculado automáticamente en 1.5, salvo que ${puedeEditar ? 'lo ajustes manualmente con el botón "✏️ Ajustar" (se aplica al producto completo, en ambas sedes, para no dejar valores distintos entre sedes)' : 'alguien con Módulo 2 completo lo haya ajustado manualmente'}.
     </div>
     ${renderIndicadores(productos)}
     <div class="filtros">
       <select onchange="filtroSede=this.value; render()">
-        <option value="todas" ${filtroSede === 'todas' ? 'selected' : ''}>Todas las sedes</option>
-        <option value="Chigorodó" ${filtroSede === 'Chigorodó' ? 'selected' : ''}>Chigorodó</option>
-        <option value="Belén de Bajirá" ${filtroSede === 'Belén de Bajirá' ? 'selected' : ''}>Belén de Bajirá</option>
-        <option value="Ambas" ${filtroSede === 'Ambas' ? 'selected' : ''}>Ambas</option>
-        <option value="sinclasificar" ${filtroSede === 'sinclasificar' ? 'selected' : ''}>Sin clasificar</option>
+        <option value="todas" ${filtroSede === 'todas' ? 'selected' : ''}>Todas las sedes (total)</option>
+        <option value="Chigorodó" ${filtroSede === 'Chigorodó' ? 'selected' : ''}>Solo Chigorodó</option>
+        <option value="Belén de Bajirá" ${filtroSede === 'Belén de Bajirá' ? 'selected' : ''}>Solo Belén de Bajirá</option>
       </select>
       <select onchange="orden=this.value; render()">
         <option value="cobertura" ${orden === 'cobertura' ? 'selected' : ''}>Más urgente primero (menor cobertura)</option>
@@ -227,25 +234,31 @@ function render() {
   `;
 }
 
-async function guardarManual(id) {
-  const minVal = document.getElementById(`edit-min-${id}`).value;
-  const maxVal = document.getElementById(`edit-max-${id}`).value;
+async function guardarManual(codigoSap) {
+  const idm = idSafe(codigoSap);
+  const minVal = document.getElementById(`edit-min-${idm}`).value;
+  const maxVal = document.getElementById(`edit-max-${idm}`).value;
+  const nuevoMin = minVal === '' ? null : parseFloat(minVal);
+  const nuevoMax = maxVal === '' ? null : parseFloat(maxVal);
+  // Se actualiza por codigo_sap (no por id de fila), para que el ajuste manual quede
+  // igual en las filas de las dos sedes de ese mismo producto y no se repita el mismo
+  // problema que causó los precios duplicados en el Módulo 5.
   const { error } = await sb.from('inventario').update({
-    stock_minimo_manual: minVal === '' ? null : parseFloat(minVal),
-    stock_maximo_manual: maxVal === '' ? null : parseFloat(maxVal),
-  }).eq('id', id);
+    stock_minimo_manual: nuevoMin,
+    stock_maximo_manual: nuevoMax,
+  }).eq('codigo_sap', codigoSap);
   if (error) {
     alert('No se pudo guardar: ' + error.message);
     return;
   }
-  const p = productos.find(x => String(x.id) === String(id));
+  const p = productos.find(x => x.codigo_sap === codigoSap);
   if (p) {
-    p.stock_minimo_manual = minVal === '' ? null : parseFloat(minVal);
-    p.stock_maximo_manual = maxVal === '' ? null : parseFloat(maxVal);
-    p.minimoEfectivo = p.stock_minimo_manual !== null ? p.stock_minimo_manual : p.stock_minimo_sugerido;
-    p.maximoEfectivo = p.stock_maximo_manual !== null ? p.stock_maximo_manual : p.stock_maximo_sugerido;
+    p.stock_minimo_manual = nuevoMin;
+    p.stock_maximo_manual = nuevoMax;
+    p.minimoEfectivo = nuevoMin !== null ? nuevoMin : p.stock_minimo_sugerido;
+    p.maximoEfectivo = nuevoMax !== null ? nuevoMax : p.stock_maximo_sugerido;
   }
-  editandoId = null;
+  editandoCodigo = null;
   render();
 }
 
@@ -290,7 +303,37 @@ async function guardarManual(id) {
   const ventasPorCodigo = {};
   (ventas || []).forEach(v => { ventasPorCodigo[v.codigo_sap] = v; });
 
-  productos = (inv || []).map(p => {
+  // Agrupa las filas de inventario (una por producto POR SEDE desde la Fase 25) por
+  // codigo_sap, sumando la cantidad total y guardando el desglose real por sede — mismo
+  // patrón ya usado en seguimiento-inventario.html (1.5, Fase 26).
+  const porCodigo = {};
+  (inv || []).forEach(row => {
+    const key = row.codigo_sap;
+    if (!porCodigo[key]) {
+      porCodigo[key] = {
+        codigo_sap: row.codigo_sap,
+        producto: row.producto,
+        categoria: row.categoria,
+        unidad: row.unidad,
+        actualizado_en: row.actualizado_en,
+        cantidad: 0,
+        sedes: {},
+        stock_minimo_manual: null,
+        stock_maximo_manual: null,
+      };
+    }
+    const acc = porCodigo[key];
+    const cant = Number(row.cantidad) || 0;
+    acc.cantidad += cant;
+    acc.sedes[row.sede] = cant;
+    // Si alguna de las filas por sede tiene un ajuste manual guardado, se usa ese valor
+    // para el producto completo (guardarManual ahora escribe el mismo valor en ambas filas).
+    if (row.stock_minimo_manual !== null && row.stock_minimo_manual !== undefined) acc.stock_minimo_manual = row.stock_minimo_manual;
+    if (row.stock_maximo_manual !== null && row.stock_maximo_manual !== undefined) acc.stock_maximo_manual = row.stock_maximo_manual;
+    if (!acc.actualizado_en || new Date(row.actualizado_en) > new Date(acc.actualizado_en)) acc.actualizado_en = row.actualizado_en;
+  });
+
+  productos = Object.values(porCodigo).map(p => {
     const s = stockPorCodigo[p.codigo_sap];
     const v = ventasPorCodigo[p.codigo_sap];
     const stock_minimo_sugerido = s ? s.stock_minimo_sugerido : null;

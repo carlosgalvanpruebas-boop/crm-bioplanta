@@ -92,6 +92,17 @@ body{font-family:'Inter','Segoe UI',system-ui,sans-serif;-webkit-font-smoothing:
 body{background:linear-gradient(180deg,#eef3ee 0%,#e8efe9 100%) fixed}
 .logo-ico{display:inline-flex;align-items:center;justify-content:center;width:42px;height:42px;min-width:42px;border-radius:50%;background:var(--vbg);box-shadow:0 2px 6px rgba(0,0,0,.12)}
 .card,.ind,.grp,.box,.form-box,.rowcard,.col,.card-t,.search-box,.pend-header,.pend-card,.intro,.tabla-wrap,.stat-box,.bloqueo{border-radius:18px;border-color:#d7e3da;box-shadow:0 6px 20px rgba(51,81,58,.10)}
+/* === Fase 35: refinamiento con principios de diseno (impeccable) -- jerarquia tipografica real, sombras/bordes mas sobrios, botones consistentes, foco accesible === */
+:root{--r-card:14px;--r-ctrl:10px;--sh-card:0 4px 14px rgba(51,81,58,.09)}
+h1,h2,h3{font-weight:700;letter-spacing:-.01em;line-height:1.25;color:var(--v1)}
+body,p,td,th,li{line-height:1.5}
+.card,.ind,.grp,.box,.form-box,.rowcard,.col,.card-t,.search-box,.pend-header,.pend-card,.intro,.tabla-wrap,.stat-box,.bloqueo{border-radius:var(--r-card)!important;box-shadow:var(--sh-card)!important}
+button,.btn,.btn-out,.btn-ms,.btn-save,.btn-h-act,.btn-exportar,input,select,textarea{border-radius:var(--r-ctrl)}
+.btn,.btn-save,.btn-h-act,.btn-exportar{font-weight:600;letter-spacing:.01em;transition:transform .12s,box-shadow .12s,background .12s}
+.btn:hover,.btn-save:hover,.btn-h-act:hover,.btn-exportar:hover{transform:translateY(-1px);box-shadow:0 4px 10px rgba(51,81,58,.18)}
+.btn-out{font-weight:600;border-width:1.5px}
+a:focus-visible,button:focus-visible,.btn:focus-visible,.btn-out:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible{outline:2px solid var(--v2);outline-offset:2px}
+@media(prefers-reduced-motion:reduce){*{transition-duration:.001ms!important;animation-duration:.001ms!important}}
 </style>
 </head>
 <body>

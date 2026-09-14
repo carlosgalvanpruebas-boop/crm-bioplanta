@@ -48,15 +48,16 @@ a:focus-visible,button:focus-visible,.btn:focus-visible,.btn-out:focus-visible,i
   th,td{padding:7px 7px}
 }
 
-/* Fase 36b: foto real de la tienda como fondo */
-body{background:linear-gradient(rgba(20,36,20,.62),rgba(20,36,20,.8)),url('img/tienda-bioplanta.jpg') center/cover no-repeat}
-.brandbox .brand,.brandbox .slogan{text-shadow:0 2px 10px rgba(0,0,0,.4)}
+/* Fase 36d: fondo solido verde corporativo (color oficial) y logo en blanco para contraste */
+body{background:var(--v2)}
+.card{background:#fff}
+.brandbox .slogan{color:#fff;opacity:.92}
 </style>
 </head>
 <body>
 
 <div class="brandbox">
-  <div class="brand">Agrotienda Bioplanta</div>
+  <img src="img/logo-bioplanta-blanco.png" alt="Agrotienda Bioplanta" class="brand-logo-lg" style="margin:0 auto 10px">
   <div class="slogan">Contigo, desde la semilla hasta la cosecha</div>
 </div>
 

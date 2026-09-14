@@ -230,7 +230,10 @@ function bind() {
       // áreas (administrativa, agronomía, industrial, etc.) comparten el
       // mismo SAP pero no son ventas de la agrotienda.
       .filter(f => !f._ocrCode2 || f._ocrCode2 === 'COMERCIA')
-      .map(({ _ocrCode2, _cancelado, ...resto }) => resto);
+      // Se envía "cancelado" tal cual (no se descarta) para que el
+      // servidor (api/cargar-ventas.js) también pueda verificar la regla
+      // — misma verificación que ya se hizo aquí, como segunda capa.
+      .map(({ _ocrCode2, _cancelado, ...resto }) => ({ ...resto, cancelado: _cancelado }));
 
     render();
   });
@@ -261,6 +264,7 @@ function bind() {
         mensajeResultado = `
           <div class="resumen">
             <span class="chip-r nuevo">${data.procesadas} procesadas</span>
+            ${data.omitidosPorCancelado ? `<span class="chip-r elim">${data.omitidosPorCancelado} omitidas (canceladas)</span>` : ''}
             ${data.omitidosPorGrupo ? `<span class="chip-r elim">${data.omitidosPorGrupo} omitidas (grupos excluidos)</span>` : ''}
             ${data.duplicadosColapsados ? `<span class="chip-r">${data.duplicadosColapsados} duplicadas en el archivo</span>` : ''}
             ${data.sinFacturaOProducto ? `<span class="chip-r elim">${data.sinFacturaOProducto} sin factura/producto</span>` : ''}

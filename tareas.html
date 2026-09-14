@@ -222,6 +222,14 @@ function bindNueva() {
       const { error: errA } = await sb.from('tarea_asignados').insert(filas);
       if (errA) throw errA;
 
+      // Notificación por correo a los asignados — best effort: si falla,
+      // no debe impedir que la tarea quede creada en el tablero.
+      fetch('/api/notificar-tarea', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ tarea_id: tarea.id }),
+      }).catch(err => console.warn('No se pudo notificar por correo:', err));
+
       showMsg('✅ Tarea creada y asignada', 'ok');
       seleccionados = [];
       setTimeout(() => { vista = 'mis'; render(); }, 1200);

@@ -78,14 +78,25 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:#f0f4f0;color:var(--
 .buscador-cot{margin-bottom:14px}
 .buscador-cot input{width:100%;border:1.5px solid #d6e2d9;border-radius:8px;padding:9px 10px;font-size:13px;font-family:inherit}
 
-/* === Fase 34: refinamiento visual profesional + mobile (institucional, aditivo) === */
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
-body{font-family:'Inter','Segoe UI',system-ui,sans-serif;-webkit-font-smoothing:antialiased}
-.card,.ind{box-shadow:0 3px 14px rgba(51,81,58,.09);border:1px solid #e3ebe4;transition:box-shadow .2s,transform .2s}
-.card:hover{box-shadow:0 8px 24px rgba(51,81,58,.14);transform:translateY(-2px)}
-.filtro-chip,.btn-h,button{transition:all .15s ease}
-.filtro-chip:hover{border-color:var(--v2)}
-.btn-h:hover{filter:brightness(1.08)}
+/* === Fase 36: rediseno visual desde cero con los 3 colores oficiales de marca (verde #4f7c5a, vino #984745, beige #E6CEAB), tipografia profesional, logo real y mejor contraste === */
+@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
+:root{--vlt:#faf8f4;--gris:#f6f4f0;--texto:#25281f;--beige-lt:#f6ecdd;--vino-lt:#f3e8e7}
+html,body{font-family:'Plus Jakarta Sans',Inter,'Segoe UI',system-ui,sans-serif;-webkit-font-smoothing:antialiased;background:var(--vlt)}
+button,input,select,textarea{font-family:inherit}
+h1,h2,h3{font-weight:800;letter-spacing:-.015em;line-height:1.2;color:var(--v1)}
+body,p,td,th,li,label{line-height:1.5}
+.brand,.sec-t{font-weight:700;letter-spacing:-.005em}
+.brand-sub,.slogan{color:var(--v2);font-weight:500}
+.card,.ind,.grp,.box,.form-box,.rowcard,.col,.card-t,.search-box,.pend-header,.pend-card,.intro,.tabla-wrap,.stat-box,.bloqueo{border-radius:14px;border:1px solid #e6e1d6;box-shadow:0 2px 10px rgba(37,40,31,.06)}
+button,.btn,.btn-out,.btn-ms,.btn-save,.btn-h-act,.btn-exportar,input,select,textarea{border-radius:10px}
+.btn,.btn-save,.btn-h-act,.btn-exportar{font-weight:600;letter-spacing:.01em;transition:transform .12s,box-shadow .12s,background .12s,filter .12s}
+.btn:hover,.btn-save:hover,.btn-h-act:hover,.btn-exportar:hover{transform:translateY(-1px);box-shadow:0 4px 10px rgba(37,40,31,.16);filter:brightness(1.05)}
+.btn-out{font-weight:600;border-width:1.5px}
+a:focus-visible,button:focus-visible,.btn:focus-visible,.btn-out:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible{outline:2px solid var(--v2);outline-offset:2px}
+@media(prefers-reduced-motion:reduce){*{transition-duration:.001ms!important;animation-duration:.001ms!important}}
+.brand-logo{height:42px;width:auto;display:block}
+.brand-logo-lg{height:60px;width:auto;display:block}
+
 @media (max-width:640px){
   .wrap{padding:14px 12px 48px}
   .header{padding:13px 14px}
@@ -94,22 +105,6 @@ body{font-family:'Inter','Segoe UI',system-ui,sans-serif;-webkit-font-smoothing:
   table{font-size:11.5px}
   th,td{padding:7px 7px}
 }
-
-/* === Fase 34c: mas contraste visual (insignias circulares, sombra mas marcada, fondo con degradado) === */
-body{background:linear-gradient(180deg,#eef3ee 0%,#e8efe9 100%) fixed}
-.logo-ico{display:inline-flex;align-items:center;justify-content:center;width:42px;height:42px;min-width:42px;border-radius:50%;background:var(--vbg);box-shadow:0 2px 6px rgba(0,0,0,.12)}
-.card,.ind,.grp,.box,.form-box,.rowcard,.col,.card-t,.search-box,.pend-header,.pend-card,.intro,.tabla-wrap,.stat-box,.bloqueo{border-radius:18px;border-color:#d7e3da;box-shadow:0 6px 20px rgba(51,81,58,.10)}
-/* === Fase 35: refinamiento con principios de diseno (impeccable) -- jerarquia tipografica real, sombras/bordes mas sobrios, botones consistentes, foco accesible === */
-:root{--r-card:14px;--r-ctrl:10px;--sh-card:0 4px 14px rgba(51,81,58,.09)}
-h1,h2,h3{font-weight:700;letter-spacing:-.01em;line-height:1.25;color:var(--v1)}
-body,p,td,th,li{line-height:1.5}
-.card,.ind,.grp,.box,.form-box,.rowcard,.col,.card-t,.search-box,.pend-header,.pend-card,.intro,.tabla-wrap,.stat-box,.bloqueo{border-radius:var(--r-card)!important;box-shadow:var(--sh-card)!important}
-button,.btn,.btn-out,.btn-ms,.btn-save,.btn-h-act,.btn-exportar,input,select,textarea{border-radius:var(--r-ctrl)}
-.btn,.btn-save,.btn-h-act,.btn-exportar{font-weight:600;letter-spacing:.01em;transition:transform .12s,box-shadow .12s,background .12s}
-.btn:hover,.btn-save:hover,.btn-h-act:hover,.btn-exportar:hover{transform:translateY(-1px);box-shadow:0 4px 10px rgba(51,81,58,.18)}
-.btn-out{font-weight:600;border-width:1.5px}
-a:focus-visible,button:focus-visible,.btn:focus-visible,.btn-out:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible{outline:2px solid var(--v2);outline-offset:2px}
-@media(prefers-reduced-motion:reduce){*{transition-duration:.001ms!important;animation-duration:.001ms!important}}
 </style>
 </head>
 <body>

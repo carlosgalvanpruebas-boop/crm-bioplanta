@@ -24,6 +24,11 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:linear-gradient(160d
 .msg.ok{background:#e6f4ea;color:#256d3b;display:block}
 .back{display:block;text-align:center;margin-top:18px;font-size:12px;color:var(--v2);text-decoration:none}
 .olvide{display:block;text-align:center;margin-top:14px;font-size:12px;color:var(--v2);text-decoration:underline;background:none;border:none;cursor:pointer;font-family:inherit;width:100%}
+.separador{display:flex;align-items:center;gap:10px;margin:18px 0;color:#999;font-size:11px;text-transform:uppercase;letter-spacing:.3px}
+.separador::before,.separador::after{content:'';flex:1;height:1px;background:#e2e8e3}
+.btn-ms{width:100%;padding:11px;background:#fff;color:#3c3c3c;border:1.5px solid #d8dfd9;border-radius:10px;font-size:13.5px;font-weight:600;cursor:pointer;font-family:inherit;display:flex;align-items:center;justify-content:center;gap:10px}
+.btn-ms:hover{background:#f7f9f7;border-color:#c3cec5}
+.btn-ms:disabled{opacity:.6;cursor:default}
 
 /* === Fase 34: refinamiento visual profesional + mobile (institucional, aditivo) === */
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
@@ -63,6 +68,13 @@ body{font-family:'Inter','Segoe UI',system-ui,sans-serif;-webkit-font-smoothing:
     <button class="btn" type="submit" id="btn-entrar">Entrar</button>
   </form>
   <div class="msg err" id="msg"></div>
+
+  <div class="separador">o</div>
+  <button class="btn-ms" id="btn-microsoft" type="button">
+    <svg width="16" height="16" viewBox="0 0 21 21" aria-hidden="true"><rect x="1" y="1" width="9" height="9" fill="#f25022"/><rect x="11" y="1" width="9" height="9" fill="#7fba00"/><rect x="1" y="11" width="9" height="9" fill="#00a4ef"/><rect x="11" y="11" width="9" height="9" fill="#ffb900"/></svg>
+    Continuar con Microsoft
+  </button>
+
   <button class="olvide" id="btn-olvide" type="button">¿Olvidaste tu contraseña?</button>
 
   <a class="back" href="index.html">&larr; Volver</a>
@@ -120,6 +132,31 @@ form.addEventListener('submit', async (e) => {
   const { data: { session } } = await sb.auth.getSession();
   if (session) window.location.href = 'hub.html';
 })();
+
+// --- Iniciar sesión con Microsoft (Azure AD / Entra ID vía Supabase Auth) ---
+// Requiere que el proveedor "Azure" esté activado en el panel de Supabase
+// (Authentication → Providers → Azure), con el Client ID, Client Secret y
+// el Tenant ID de una app registrada en Azure AD por el equipo de TI/M365
+// de Bioplanta. Mientras eso no esté activado, este botón mostrará un
+// error de Supabase indicando que el proveedor no está habilitado.
+const btnMicrosoft = document.getElementById('btn-microsoft');
+btnMicrosoft.addEventListener('click', async () => {
+  btnMicrosoft.disabled = true;
+  const { error } = await sb.auth.signInWithOAuth({
+    provider: 'azure',
+    options: {
+      scopes: 'email openid profile',
+      redirectTo: window.location.origin + '/hub.html',
+    },
+  });
+  if (error) {
+    msg.textContent = 'No se pudo iniciar con Microsoft: ' + error.message;
+    msg.style.display = 'block';
+    btnMicrosoft.disabled = false;
+  }
+  // Si no hay error, Supabase redirige automáticamente a Microsoft para
+  // iniciar sesión y luego de vuelta a hub.html.
+});
 
 // --- Recuperar contraseña ---
 const boxLogin = document.getElementById('box-login');

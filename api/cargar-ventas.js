@@ -1,207 +1,328 @@
-// ============================================================
-// FUNCIÓN SERVERLESS — Carga de histórico de ventas
-//
-// Mismo patrón que cargar-inventario.js: corre en el servidor de
-// Vercel (nunca en el navegador) porque usa la llave de servicio
-// de Supabase, la única forma de escribir en `ventas` ahora que
-// esa tabla quedó protegida por RLS (Fase 21).
-//
-// A diferencia de inventario (que se REEMPLAZA completo cada
-// carga), ventas es un histórico que solo CRECE: cada carga se
-// AGREGA a lo que ya existe, sin borrar nada. Se hace upsert por
-// (factura, codigo_sap) para que si el mismo archivo (o uno que
-// se solape en fechas) se sube dos veces, no queden líneas
-// duplicadas — simplemente se actualiza la línea ya existente.
-//
-// También filtra automáticamente cualquier línea cuyo código SAP
-// pertenezca a un grupo ya marcado como "no es de Agrotienda" en
-// `sap_prefijos_excluidos` (la misma lista que se usa en la carga
-// de inventario), para no ensuciar el histórico de ventas con
-// ventas de otro negocio que comparte el mismo SAP.
-// ============================================================
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Agrotienda Bioplanta · Carga de ventas</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+:root{--v1:#33513a;--v2:#4f7c5a;--v3:#84a38c;--v4:#a9c2af;--vbg:#eaefeb;--vlt:#f4f8f5;--texto:#1a2e1a;--beige:#e6ceab;--vino:#984745}
+body{font-family:'Segoe UI',system-ui,sans-serif;background:#f0f4f0;color:var(--texto);min-height:100vh}
+.header{background:linear-gradient(135deg,var(--v1),var(--v2));color:#fff;padding:16px 20px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;box-shadow:0 2px 12px rgba(0,0,0,.2)}
+.hdr-l{display:flex;align-items:center;gap:10px}
+.logo-ico{font-size:26px}
+.brand{font-size:15px;font-weight:800}
+.brand-sub{font-size:11px;opacity:.8}
+.btn-h{background:rgba(255,255,255,.15);border:1px solid rgba(255,255,255,.3);color:#fff;padding:7px 16px;border-radius:20px;font-size:12px;cursor:pointer;font-family:inherit;text-decoration:none}
 
-const { createClient } = require('@supabase/supabase-js');
+.wrap{max-width:900px;margin:0 auto;padding:18px 18px 60px}
+.loading{text-align:center;padding:80px;color:#888}
 
+.aviso{background:var(--beige);color:var(--v1);border-radius:10px;padding:12px 16px;font-size:12.5px;margin-bottom:16px;line-height:1.5}
+.card{background:#fff;border-radius:16px;padding:20px;box-shadow:0 2px 10px rgba(0,0,0,.07);margin-bottom:18px}
+.card h3{font-size:14px;color:var(--v1);margin-bottom:10px}
+
+.drop{border:2px dashed #b7d0bb;border-radius:12px;padding:30px;text-align:center;color:#777;font-size:13px}
+input[type=file]{margin-top:12px}
+.btn{background:var(--v2);color:#fff;border:none;border-radius:8px;padding:10px 18px;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit}
+.btn:disabled{opacity:.5;cursor:default}
+.btn-sec{background:var(--vbg);color:var(--v1)}
+
+table{width:100%;border-collapse:collapse;font-size:12px;margin-top:10px}
+th,td{text-align:left;padding:6px 8px;border-bottom:1px solid var(--vbg)}
+th{color:var(--v2);font-size:11px;text-transform:uppercase}
+
+.resumen{display:flex;gap:10px;flex-wrap:wrap;margin:14px 0}
+.chip-r{background:var(--vlt);color:var(--v2);padding:8px 14px;border-radius:10px;font-size:12.5px;font-weight:700}
+.chip-r.nuevo{background:#e6f4ea;color:#256d3b}
+.chip-r.elim{background:#fde3e2;color:var(--vino)}
+
+.msg{padding:10px 14px;border-radius:8px;font-size:13px;margin-top:10px}
+.msg.ok{background:#e6f4ea;color:#256d3b}
+.msg.err{background:#fde3e2;color:var(--vino)}
+
+.hist-row{display:flex;justify-content:space-between;gap:10px;padding:8px 0;border-bottom:1px solid var(--vbg);font-size:12px}
+.hist-row:last-child{border-bottom:none}
+.hist-estado{font-size:10px;font-weight:700;padding:2px 8px;border-radius:8px}
+.hist-ok{background:#e6f4ea;color:#256d3b}
+.hist-error{background:#fde3e2;color:var(--vino)}
+
+/* === Fase 36: rediseno visual desde cero con los 3 colores oficiales de marca (verde #4f7c5a, vino #984745, beige #E6CEAB), tipografia profesional, logo real y mejor contraste === */
+@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
+:root{--vlt:#faf8f4;--gris:#f6f4f0;--texto:#25281f;--beige-lt:#f6ecdd;--vino-lt:#f3e8e7}
+html,body{font-family:'Plus Jakarta Sans',Inter,'Segoe UI',system-ui,sans-serif;-webkit-font-smoothing:antialiased;background:var(--vlt)}
+button,input,select,textarea{font-family:inherit}
+h1,h2,h3{font-weight:800;letter-spacing:-.015em;line-height:1.2;color:var(--v1)}
+body,p,td,th,li,label{line-height:1.5}
+.brand,.sec-t{font-weight:700;letter-spacing:-.005em}
+.brand-sub,.slogan{color:var(--v2);font-weight:500}
+.card,.ind,.grp,.box,.form-box,.rowcard,.col,.card-t,.search-box,.pend-header,.pend-card,.intro,.tabla-wrap,.stat-box,.bloqueo{border-radius:14px;border:1px solid #e6e1d6;box-shadow:0 2px 10px rgba(37,40,31,.06)}
+button,.btn,.btn-out,.btn-ms,.btn-save,.btn-h-act,.btn-exportar,input,select,textarea{border-radius:10px}
+.btn,.btn-save,.btn-h-act,.btn-exportar{font-weight:600;letter-spacing:.01em;transition:transform .12s,box-shadow .12s,background .12s,filter .12s}
+.btn:hover,.btn-save:hover,.btn-h-act:hover,.btn-exportar:hover{transform:translateY(-1px);box-shadow:0 4px 10px rgba(37,40,31,.16);filter:brightness(1.05)}
+.btn-out{font-weight:600;border-width:1.5px}
+a:focus-visible,button:focus-visible,.btn:focus-visible,.btn-out:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible{outline:2px solid var(--v2);outline-offset:2px}
+@media(prefers-reduced-motion:reduce){*{transition-duration:.001ms!important;animation-duration:.001ms!important}}
+.brand-logo{height:42px;width:auto;display:block}
+.brand-logo-lg{height:60px;width:auto;display:block}
+
+@media (max-width:640px){
+  .wrap{padding:14px 12px 48px}
+  .header{padding:13px 14px}
+  .brand{font-size:14px}
+  .card,.ind{padding:16px 14px;overflow-x:auto}
+  table{font-size:11.5px}
+  th,td{padding:7px 7px}
+}
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div class="hdr-l">
+    <div class="logo-ico">🧾</div>
+    <div>
+      <div class="brand">Carga de ventas</div>
+      <div class="brand-sub">Sube el Excel de SAP y el sistema agrega el histórico de ventas</div>
+    </div>
+  </div>
+  <a class="btn-h" href="cargar-informacion.html">← Cargar información</a>
+</div>
+
+<div class="wrap" id="wrap">
+  <div class="loading">Cargando...</div>
+</div>
+
+<script>
 const SUPABASE_URL = 'https://fpqogvxssnoarzgxcitc.supabase.co';
-const SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
+const SUPABASE_KEY = 'sb_publishable_ccZF-8tenblFEah5lXfd3w_mYTHMtMC';
+const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
-function prefijoDe(codigo) {
-  const m = (codigo || '').toString().trim().match(/^([A-Za-z]+)/);
-  return m ? m[1].toUpperCase() : '';
+// Alias de encabezados posibles — no sabemos todavía el nombre exacto que
+// trae el reporte de ventas de SAP, así que se cubren varias variantes
+// comunes. Si al subir el primer archivo real la vista previa muestra
+// columnas vacías o mal ubicadas, se ajusta esta lista (mismo tipo de
+// ajuste que hubo que hacer con el cargador de inventario).
+const ALIAS = {
+  // "fecha de contabilización" es la fecha real de la venta; "fecha de
+  // vencimiento" (que también trae el reporte) es la fecha límite de pago
+  // del crédito — a propósito NO se usa esa para "fecha".
+  factura: ['numero de documento', 'número de documento', 'numero de factura', 'número de factura', 'no. factura', 'factura', 'documento'],
+  fecha: ['fecha de contabilizacion', 'fecha de contabilización', 'fecha de factura', 'fecha factura', 'fecha venta', 'fecha'],
+  fecha_vencimiento: ['fecha de vencimiento', 'fecha vencimiento'],
+  codigo_sap: ['itemcode', 'numero de articulo', 'número de artículo', 'codigo sap', 'código sap', 'codigo', 'código', 'item code'],
+  producto: ['dscription', 'descripcion', 'descripción', 'nombre', 'producto', 'item name'],
+  cantidad: ['quantity', 'cantidad vendida', 'cantidad', 'unidades'],
+  valor: ['ingreso total', 'valor total', 'valor', 'total', 'importe'],
+  cliente: ['nombre de cliente/proveedor', 'nombre del cliente', 'razon social', 'razón social', 'cliente'],
+  cliente_nit: ['codigo de cliente/proveedor', 'código de cliente/proveedor', 'nit', 'identificacion', 'identificación', 'cedula/nit', 'cédula/nit'],
+  vendedor: ['empleado de ventas', 'asesor', 'vendedor'],
+  ocr_code: ['ocrcode', 'centro de costo', 'centro de costo (ocrcode)'],
+  ocr_code2: ['ocrcode2'],
+  cancelado: ['cancelado'],
+};
+
+// El centro de costo (OcrCode) de SAP identifica la sede real de la venta.
+// "CAREPA" es el nombre antiguo de la sede de Chigorodó antes del traslado
+// (confirmado por Carlos, sep-2026) -- se trata igual que CHIGOROD.
+function sedeDeCentroCosto(valor) {
+  const v = String(valor || '').trim().toUpperCase();
+  if (v === 'CHIGOROD' || v === 'CAREPA') return 'Chigorodó';
+  if (v === 'BAJIRA' || v === 'BAJIRÁ') return 'Belén de Bajirá';
+  return null;
+}
+function normaliza(s) {
+  return String(s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').trim();
+}
+function mapaColumnas(headers) {
+  const norm = headers.map(normaliza);
+  const mapa = {};
+  Object.entries(ALIAS).forEach(([campo, alias]) => {
+    for (const a of alias) {
+      const idx = norm.indexOf(a);
+      if (idx !== -1) { mapa[campo] = headers[idx]; break; }
+    }
+  });
+  return mapa;
 }
 
-// Un código queda excluido si coincide EXACTO con algo guardado en
-// `sap_prefijos_excluidos` (ej. "SER_04", para un sub-código puntual)
-// o si su prefijo de letras coincide (ej. "TUZAP", "ACECRUDO" — grupos
-// completos). Se necesitan las dos formas: el prefijo de letras solo
-// no alcanza para distinguir sub-códigos de un mismo grupo (SER_04 vs
-// SER_01, SER_05, SER_10, SER_12, que NO deben excluirse).
-function estaExcluido(codigo, excluidosSet) {
-  const c = (codigo || '').toString().trim().toUpperCase();
-  if (!c) return false;
-  if (excluidosSet.has(c)) return true;
-  const p = prefijoDe(c);
-  return !!p && excluidosSet.has(p);
+let filas = [];
+let sesionActual = null;
+let mensajeResultado = '';
+
+function render() {
+  const preview = filas.slice(0, 5);
+  const cols = preview.length ? Object.keys(preview[0]) : [];
+
+  document.getElementById('wrap').innerHTML = `
+    <div class="aviso">
+      ℹ️ Esta pantalla <b>agrega</b> al histórico de ventas — no reemplaza ni borra nada (a diferencia de la carga de inventario). Si subes el mismo archivo dos veces, o rangos de fecha que se solapan, las líneas repetidas (misma factura + mismo artículo) se actualizan, no se duplican. Los artículos de grupos ya marcados como "no son de Agrotienda" (ver carga de inventario) se excluyen automáticamente, igual que las filas canceladas y las de otras áreas del centro de costo (OcrCode2 distinto de "Comercial"). La sede se toma del centro de costo real de SAP (Carepa se trata como Chigorodó, por el traslado). Contado/Crédito se calcula solo: mismo día entre fecha de contabilización y fecha de vencimiento = Contado, con plazo = Crédito.
+    </div>
+    <div class="card">
+      <h3>1. Selecciona el archivo Excel</h3>
+      <div class="drop">
+        📄 Arrastra o selecciona el archivo de ventas exportado de SAP (.xlsx)
+        <br><input type="file" id="f-archivo" accept=".xlsx,.xls">
+      </div>
+      ${mensajeResultado}
+    </div>
+    ${filas.length ? `
+    <div class="card">
+      <h3>2. Vista previa (${filas.length} líneas detectadas)</h3>
+      <table>
+        <thead><tr>${cols.map(c => `<th>${c}</th>`).join('')}</tr></thead>
+        <tbody>
+          ${preview.map(f => `<tr>${cols.map(c => `<td>${f[c] ?? '—'}</td>`).join('')}</tr>`).join('')}
+        </tbody>
+      </table>
+      <button class="btn" id="btn-confirmar" style="margin-top:14px">✅ Confirmar y cargar ${filas.length} líneas</button>
+      <button class="btn btn-sec" id="btn-cancelar" style="margin-top:14px">Cancelar</button>
+    </div>` : ''}
+    <div class="card">
+      <h3>Historial de cargas</h3>
+      <div id="historial">Cargando historial...</div>
+    </div>
+  `;
+  bind();
+  cargarHistorial();
 }
 
-function numeroOr(valor, porDefecto) {
-  if (valor === undefined || valor === null || valor === '') return porDefecto;
-  if (typeof valor === 'number') return valor;
-  const limpio = String(valor).trim().replace(/\./g, '').replace(',', '.').replace(/[^0-9.\-]/g, '');
-  const n = Number(limpio);
-  return Number.isFinite(n) ? n : porDefecto;
-}
+function bind() {
+  document.getElementById('f-archivo')?.addEventListener('change', async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    mensajeResultado = '';
+    const buf = await file.arrayBuffer();
+    const wb = XLSX.read(buf, { type: 'array', cellDates: true });
+    const hoja = wb.Sheets[wb.SheetNames[0]];
+    const json = XLSX.utils.sheet_to_json(hoja, { defval: null });
+    if (!json.length) { alert('El archivo no tiene filas.'); return; }
 
-function fechaISO(valor) {
-  if (!valor) return null;
-  if (valor instanceof Date) return valor.toISOString().slice(0, 10);
-  if (typeof valor === 'number') {
-    // Serial de fecha de Excel (días desde 1899-12-30)
-    const ms = Math.round((valor - 25569) * 86400 * 1000);
-    return new Date(ms).toISOString().slice(0, 10);
-  }
-  const d = new Date(valor);
-  return isNaN(d.getTime()) ? null : d.toISOString().slice(0, 10);
-}
+    const headers = Object.keys(json[0]);
+    const mapa = mapaColumnas(headers);
+    if (!mapa.factura || !mapa.producto) {
+      alert('No se encontró una columna de factura y/o descripción del producto. Revisa que el archivo tenga esos datos, o avísale a Claude para ajustar los nombres de columna reconocidos.');
+      return;
+    }
 
-// Contado/Crédito (confirmado por Carlos, sep-2026): el reporte de SAP no
-// trae una columna directa de condición de pago, así que se infiere de la
-// diferencia entre "Fecha de contabilización" (la venta) y "Fecha de
-// vencimiento" (el plazo del crédito) — mismo día (0 de diferencia) es
-// Contado, cualquier plazo mayor es Crédito.
-function formaPagoDe(fechaContabISO, fechaVencISO) {
-  if (!fechaContabISO || !fechaVencISO) return null;
-  const a = new Date(fechaContabISO + 'T00:00:00');
-  const b = new Date(fechaVencISO + 'T00:00:00');
-  if (isNaN(a.getTime()) || isNaN(b.getTime())) return null;
-  const dias = Math.round((b - a) / 86400000);
-  return dias <= 0 ? 'Contado' : 'Crédito';
-}
+    filas = json.map(row => ({
+      factura: String(row[mapa.factura] || '').trim(),
+      producto: String(row[mapa.producto] || '').trim(),
+      codigo_sap: mapa.codigo_sap ? String(row[mapa.codigo_sap] || '').trim() : '',
+      fecha: mapa.fecha ? row[mapa.fecha] : null,
+      fecha_vencimiento: mapa.fecha_vencimiento ? row[mapa.fecha_vencimiento] : null,
+      cantidad: mapa.cantidad ? row[mapa.cantidad] : 0,
+      valor: mapa.valor ? row[mapa.valor] : 0,
+      cliente: mapa.cliente ? String(row[mapa.cliente] || '').trim() : null,
+      cliente_nit: mapa.cliente_nit ? String(row[mapa.cliente_nit] || '').trim() : null,
+      vendedor: mapa.vendedor ? String(row[mapa.vendedor] || '').trim() : null,
+      sede: mapa.ocr_code ? sedeDeCentroCosto(row[mapa.ocr_code]) : null,
+      _ocrCode2: mapa.ocr_code2 ? String(row[mapa.ocr_code2] || '').trim().toUpperCase() : '',
+      _cancelado: mapa.cancelado ? String(row[mapa.cancelado] || '').trim().toUpperCase() : '',
+    }))
+      .filter(f => f.factura && f.producto)
+      // Solo filas canceladas explícitamente se excluyen (si no viene la
+      // columna, se asume válida, para no romper archivos que no la traigan).
+      .filter(f => !f._cancelado || f._cancelado === 'N')
+      // OcrCode2 = 'COMERCIA' es el área comercial (la agrotienda); otras
+      // áreas (administrativa, agronomía, industrial, etc.) comparten el
+      // mismo SAP pero no son ventas de la agrotienda.
+      .filter(f => !f._ocrCode2 || f._ocrCode2 === 'COMERCIA')
+      // Se envía "cancelado" tal cual (no se descarta) para que el
+      // servidor (api/cargar-ventas.js) también pueda verificar la regla
+      // — misma verificación que ya se hizo aquí, como segunda capa.
+      .map(({ _ocrCode2, _cancelado, ...resto }) => ({ ...resto, cancelado: _cancelado }));
 
-module.exports = async (req, res) => {
-  if (req.method !== 'POST') {
-    return res.status(405).json({ error: 'Método no permitido' });
-  }
-
-  if (!SERVICE_ROLE_KEY) {
-    return res.status(500).json({ error: 'Falta configurar SUPABASE_SERVICE_ROLE_KEY en Vercel' });
-  }
-
-  const sbAdmin = createClient(SUPABASE_URL, SERVICE_ROLE_KEY, {
-    auth: { autoRefreshToken: false, persistSession: false },
+    render();
   });
 
-  try {
-    const authHeader = req.headers.authorization || '';
-    const token = authHeader.replace('Bearer ', '').trim();
-    if (!token) return res.status(401).json({ error: 'Falta autenticación' });
+  document.getElementById('btn-cancelar')?.addEventListener('click', () => {
+    filas = [];
+    mensajeResultado = '';
+    render();
+  });
 
-    const { data: userData, error: userError } = await sbAdmin.auth.getUser(token);
-    if (userError || !userData || !userData.user) {
-      return res.status(401).json({ error: 'Sesión inválida, vuelve a iniciar sesión' });
-    }
-
-    const { data: perfil, error: perfilError } = await sbAdmin
-      .from('perfiles')
-      .select('es_super_admin, cargo, nombre')
-      .eq('id', userData.user.id)
-      .single();
-
-    if (perfilError || !perfil) {
-      return res.status(403).json({ error: 'No se encontró tu perfil' });
-    }
-
-    const cargo = (perfil.cargo || '').toLowerCase();
-    const autorizado = perfil.es_super_admin || cargo.includes('almacén') || cargo.includes('almacen');
-    if (!autorizado) {
-      return res.status(403).json({ error: 'No tienes permiso para cargar el histórico de ventas' });
-    }
-
-    const body = req.body || {};
-    const filas = Array.isArray(body.ventas) ? body.ventas : null;
-    if (!filas || !filas.length) {
-      return res.status(400).json({ error: 'No llegó ninguna fila para cargar' });
-    }
-
-    // Grupos SAP que no son de Agrotienda (misma lista que usa el
-    // cargador de inventario) — se filtran también aquí.
-    const { data: excluidosRows } = await sbAdmin.from('sap_prefijos_excluidos').select('prefijo');
-    const prefijosExcluidos = new Set((excluidosRows || []).map(r => (r.prefijo || '').toUpperCase()));
-
-    let omitidosPorGrupo = 0;
-    let omitidosSinCodigo = 0;
-    const limpiasMap = new Map(); // clave factura||codigo_sap -> fila (colapsa duplicados del mismo archivo)
-    let sinFacturaOProducto = 0;
-
-    for (const f of filas) {
-      const factura = (f.factura || '').toString().trim();
-      const producto = (f.producto || '').toString().trim();
-      if (!factura || !producto) { sinFacturaOProducto++; continue; }
-
-      const codigo_sap = (f.codigo_sap || '').toString().trim();
-      // Una venta real de mostrador siempre trae código de artículo. Las
-      // pocas líneas que llegan sin código (ej. "CAMIONETA DUSTER LRQ-524",
-      // "TRANSPORTE DE REPUESTOS CABLE VÍA") son movimientos sueltos de
-      // SAP que no son productos de la agrotienda (Carlos, sep-2026).
-      if (!codigo_sap) { omitidosSinCodigo++; continue; }
-      if (estaExcluido(codigo_sap, prefijosExcluidos)) { omitidosPorGrupo++; continue; }
-
-      const fechaContab = fechaISO(f.fecha);
-      const fechaVenc = fechaISO(f.fecha_vencimiento);
-      const fila = {
-        factura,
-        producto,
-        codigo_sap: codigo_sap || null,
-        fecha: fechaContab,
-        cantidad: numeroOr(f.cantidad, 0),
-        valor: numeroOr(f.valor, 0),
-        cliente: f.cliente ? String(f.cliente).trim() : null,
-        cliente_nit: f.cliente_nit ? String(f.cliente_nit).trim() : null,
-        vendedor: f.vendedor ? String(f.vendedor).trim() : null,
-        sede: f.sede ? String(f.sede).trim() : null,
-        forma_pago: formaPagoDe(fechaContab, fechaVenc),
-      };
-      limpiasMap.set(`${factura}||${codigo_sap}`, fila);
-    }
-
-    const limpios = [...limpiasMap.values()];
-    const duplicadosColapsados = filas.length - sinFacturaOProducto - omitidosPorGrupo - omitidosSinCodigo - limpios.length;
-
-    if (!limpios.length) {
-      return res.status(400).json({ error: 'Ninguna fila tenía factura y producto válidos' });
-    }
-
-    const { error: upsertError } = await sbAdmin
-      .from('ventas')
-      .upsert(limpios, { onConflict: 'factura,codigo_sap' });
-    if (upsertError) throw upsertError;
-
-    await sbAdmin.from('sync_log').insert({
-      fecha: new Date().toISOString(),
-      modulo: 'ventas',
-      registros: limpios.length,
-      status: 'ok',
-      mensaje: `Cargado por ${perfil.nombre}: ${limpios.length} líneas procesadas, ${omitidosPorGrupo} omitidas por grupos excluidos, ${omitidosSinCodigo} omitidas por no traer código SAP, ${duplicadosColapsados} duplicadas dentro del mismo archivo, ${sinFacturaOProducto} sin factura/producto válidos`,
-    });
-
-    return res.status(200).json({
-      ok: true,
-      procesadas: limpios.length,
-      omitidosPorGrupo,
-      omitidosSinCodigo,
-      duplicadosColapsados,
-      sinFacturaOProducto,
-    });
-  } catch (e) {
+  document.getElementById('btn-confirmar')?.addEventListener('click', async () => {
+    const btn = document.getElementById('btn-confirmar');
+    btn.disabled = true;
+    btn.textContent = 'Cargando...';
     try {
-      await sbAdmin.from('sync_log').insert({
-        fecha: new Date().toISOString(),
-        modulo: 'ventas',
-        registros: 0,
-        status: 'error',
-        mensaje: e.message,
+      const resp = await fetch('/api/cargar-ventas', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${sesionActual.access_token}`,
+        },
+        body: JSON.stringify({ ventas: filas }),
       });
-    } catch (e2) { /* no dejar que un error del log tumbe la respuesta */ }
-    return res.status(500).json({ error: 'Error interno: ' + e.message });
+      const data = await resp.json();
+      if (!resp.ok) {
+        mensajeResultado = `<div class="msg err">❌ ${data.error || 'No se pudo cargar'}</div>`;
+      } else {
+        mensajeResultado = `
+          <div class="resumen">
+            <span class="chip-r nuevo">${data.procesadas} procesadas</span>
+            ${data.omitidosPorCancelado ? `<span class="chip-r elim">${data.omitidosPorCancelado} omitidas (canceladas)</span>` : ''}
+            ${data.omitidosPorGrupo ? `<span class="chip-r elim">${data.omitidosPorGrupo} omitidas (grupos excluidos)</span>` : ''}
+            ${data.duplicadosColapsados ? `<span class="chip-r">${data.duplicadosColapsados} duplicadas en el archivo</span>` : ''}
+            ${data.sinFacturaOProducto ? `<span class="chip-r elim">${data.sinFacturaOProducto} sin factura/producto</span>` : ''}
+          </div>
+          <div class="msg ok">✅ Ventas cargadas correctamente.</div>
+        `;
+        filas = [];
+      }
+    } catch (e) {
+      mensajeResultado = `<div class="msg err">❌ Error de red: ${e.message}</div>`;
+    }
+    render();
+    cargarHistorial();
+  });
+}
+
+function fmtFechaHora(iso) {
+  if (!iso) return '—';
+  return new Date(iso).toLocaleString('es-CO', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+}
+
+async function cargarHistorial() {
+  const el = document.getElementById('historial');
+  if (!el) return;
+  const { data, error } = await sb.from('sync_log').select('*').eq('modulo', 'ventas').order('fecha', { ascending: false }).limit(10);
+  if (error) { el.innerHTML = `<div style="color:#999;font-size:12px">No se pudo cargar el historial.</div>`; return; }
+  if (!data || !data.length) { el.innerHTML = `<div style="color:#999;font-size:12px">Todavía no hay cargas registradas.</div>`; return; }
+  el.innerHTML = data.map(l => `
+    <div class="hist-row">
+      <span>${fmtFechaHora(l.fecha)}</span>
+      <span style="flex:1;padding:0 10px">${l.mensaje || '—'}</span>
+      <span class="hist-estado ${l.status === 'ok' ? 'hist-ok' : 'hist-error'}">${l.status}</span>
+    </div>
+  `).join('');
+}
+
+(async () => {
+  const { data: { session } } = await sb.auth.getSession();
+  if (!session) { window.location.href = 'login.html'; return; }
+  sesionActual = session;
+
+  const { data: perfil } = await sb.from('perfiles').select('*').eq('id', session.user.id).single();
+  if (!perfil) {
+    document.getElementById('wrap').innerHTML = '<div class="loading">Tu usuario no tiene un perfil configurado todavía.</div>';
+    return;
   }
-};
+
+  const cargo = (perfil.cargo || '').toLowerCase();
+  const autorizado = perfil.es_super_admin || cargo.includes('almacén') || cargo.includes('almacen');
+
+  if (!autorizado) {
+    document.getElementById('wrap').innerHTML = '<div class="loading">No tienes permiso para usar esta pantalla.</div>';
+    return;
+  }
+
+  render();
+})();
+</script>
+
+</body>
+</html>

@@ -1,0 +1,356 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Agrotienda Bioplanta · Registro de ventas</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+:root{--v1:#33513a;--v2:#4f7c5a;--v3:#84a38c;--v4:#a9c2af;--vbg:#eaefeb;--vlt:#f4f8f5;--texto:#1a2e1a;--beige:#e6ceab;--vino:#984745}
+body{font-family:'Segoe UI',system-ui,sans-serif;background:#f0f4f0;color:var(--texto);min-height:100vh}
+.header{background:linear-gradient(135deg,var(--v1),var(--v2));color:#fff;padding:16px 20px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;box-shadow:0 2px 12px rgba(0,0,0,.2)}
+.hdr-l{display:flex;align-items:center;gap:10px}
+.logo-ico{font-size:26px}
+.brand{font-size:15px;font-weight:800}
+.brand-sub{font-size:11px;opacity:.8}
+.btn-h{background:rgba(255,255,255,.15);border:1px solid rgba(255,255,255,.3);color:#fff;padding:7px 16px;border-radius:20px;font-size:12px;cursor:pointer;font-family:inherit;text-decoration:none}
+
+.wrap{max-width:1200px;margin:0 auto;padding:18px 18px 60px}
+.loading{text-align:center;padding:80px;color:#888}
+.aviso{background:var(--beige);color:var(--v1);border-radius:10px;padding:12px 16px;font-size:12.5px;margin-bottom:16px;line-height:1.5}
+
+.indicadores{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:12px;margin-bottom:16px}
+.ind{background:#fff;border-radius:14px;padding:14px 16px;box-shadow:0 2px 10px rgba(0,0,0,.06)}
+.ind b{display:block;font-size:22px;font-weight:800;color:var(--v1)}
+.ind span{font-size:11.5px;color:#777}
+.ind.credito b{color:var(--vino)}
+.ind.contado b{color:#8a5a00}
+
+.filtros{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px;align-items:center}
+.filtro-chip{background:#fff;border:1.5px solid var(--v3);color:var(--v2);padding:6px 13px;border-radius:16px;font-size:11.5px;font-weight:700;cursor:pointer;font-family:inherit}
+.filtro-chip.act{background:var(--v2);color:#fff;border-color:var(--v2)}
+.filtro-grupo{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px;align-items:center}
+.filtro-label{font-size:11px;color:#888;font-weight:700;text-transform:uppercase;letter-spacing:.3px;width:100%;margin-top:6px}
+.rango-custom{display:flex;gap:8px;align-items:center;margin-bottom:14px;flex-wrap:wrap}
+.rango-custom input{border:1.5px solid #d6e2d9;border-radius:8px;padding:7px 10px;font-size:12.5px;font-family:inherit}
+.rango-custom span{font-size:12px;color:#888}
+
+.busca-row{display:flex;gap:10px;align-items:center;margin-bottom:14px;flex-wrap:wrap}
+.busca-row input{flex:1;min-width:220px;border:1.5px solid #d6e2d9;border-radius:8px;padding:8px 12px;font-size:12.5px;font-family:inherit}
+.btn-exportar{background:var(--v1);color:#fff;border:none;padding:8px 16px;border-radius:20px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;white-space:nowrap}
+.btn-exportar:disabled{opacity:.5;cursor:default}
+
+.card{background:#fff;border-radius:16px;padding:20px;box-shadow:0 2px 10px rgba(0,0,0,.07);margin-bottom:18px}
+.card h3{font-size:13.5px;color:var(--v1);margin-bottom:4px}
+.card .sub{font-size:11.5px;color:#888;margin-bottom:14px}
+
+table{width:100%;border-collapse:collapse;font-size:12px}
+.tabla-scroll{overflow-x:auto}
+th,td{text-align:left;padding:8px 9px;border-bottom:1px solid var(--vbg);white-space:nowrap}
+th{color:var(--v2);font-size:10.5px;text-transform:uppercase;letter-spacing:.3px;background:var(--vlt);position:sticky;top:0}
+tr:last-child td{border-bottom:none}
+td.num,th.num{text-align:right}
+td.prod{white-space:normal;min-width:180px}
+.pill{display:inline-block;padding:2px 8px;border-radius:10px;font-size:10.5px;font-weight:700}
+.pill.contado{background:#fdf1d6;color:#8a5a00}
+.pill.credito{background:#f4e2e1;color:var(--vino)}
+.pill.sin{background:var(--vbg);color:#999}
+
+.vacio{text-align:center;padding:40px;color:#999;font-size:13px}
+.nota-mas{text-align:center;padding:12px;color:#999;font-size:11.5px}
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div class="hdr-l">
+    <div class="logo-ico">📋</div>
+    <div>
+      <div class="brand">Registro de ventas</div>
+      <div class="brand-sub">Histórico detallado — solo lectura desde SAP</div>
+    </div>
+  </div>
+  <a class="btn-h" href="hub.html">← Hub</a>
+</div>
+
+<div class="wrap" id="wrap">
+  <div class="loading">Cargando...</div>
+</div>
+
+<script>
+const SUPABASE_URL = 'https://fpqogvxssnoarzgxcitc.supabase.co';
+const SUPABASE_KEY = 'sb_publishable_ccZF-8tenblFEah5lXfd3w_mYTHMtMC';
+const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+const SEDES = ['Chigorodó', 'Belén de Bajirá'];
+const RANGOS = [
+  { id: 'hoy', nombre: 'Hoy' },
+  { id: 'ayer', nombre: 'Ayer' },
+  { id: 'semana', nombre: 'Esta semana' },
+  { id: 'mes', nombre: 'Este mes' },
+  { id: 'elegir-mes', nombre: 'Elegir un mes' },
+  { id: 'custom', nombre: 'Rango personalizado' },
+  { id: 'todo', nombre: 'Todo el histórico' },
+];
+const FORMAS_PAGO = [
+  { id: 'todas', nombre: 'Todas' },
+  { id: 'Contado', nombre: 'Contado' },
+  { id: 'Crédito', nombre: 'Crédito' },
+];
+const FILAS_EN_PANTALLA = 300;
+
+let ventas = [];
+let filtroRango = 'mes';
+let filtroSede = 'todas';
+let filtroFormaPago = 'todas';
+let busqueda = '';
+let customDesde = '';
+let customHasta = '';
+let mesElegido = `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}`;
+
+function fmtMoneda(n) {
+  return '$' + Math.round(n || 0).toLocaleString('es-CO');
+}
+function hoyISO() {
+  return new Date().toISOString().slice(0, 10);
+}
+function sumarDias(iso, dias) {
+  const d = new Date(iso + 'T00:00:00');
+  d.setDate(d.getDate() + dias);
+  return d.toISOString().slice(0, 10);
+}
+function inicioSemanaISO() {
+  const d = new Date();
+  const dia = (d.getDay() + 6) % 7; // lunes=0
+  d.setDate(d.getDate() - dia);
+  return d.toISOString().slice(0, 10);
+}
+function inicioMesISO() {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-01`;
+}
+
+function rangoFechas() {
+  const hoy = hoyISO();
+  if (filtroRango === 'hoy') return [hoy, hoy];
+  if (filtroRango === 'ayer') { const a = sumarDias(hoy, -1); return [a, a]; }
+  if (filtroRango === 'semana') return [inicioSemanaISO(), hoy];
+  if (filtroRango === 'mes') return [inicioMesISO(), hoy];
+  if (filtroRango === 'elegir-mes') {
+    const [anio, mes] = mesElegido.split('-').map(Number);
+    const desde = `${anio}-${String(mes).padStart(2, '0')}-01`;
+    const ultimoDia = new Date(anio, mes, 0).getDate();
+    const hasta = `${anio}-${String(mes).padStart(2, '0')}-${String(ultimoDia).padStart(2, '0')}`;
+    return [desde, hasta];
+  }
+  if (filtroRango === 'todo') return ['0000-01-01', '9999-12-31'];
+  return [customDesde || hoy, customHasta || hoy];
+}
+
+function coincideBusqueda(v, texto) {
+  if (!texto) return true;
+  const t = texto.toLowerCase();
+  return (v.cliente || '').toLowerCase().includes(t) || (v.vendedor || '').toLowerCase().includes(t);
+}
+
+function filtrarVentas() {
+  const [desde, hasta] = rangoFechas();
+  const texto = busqueda.trim();
+  return ventas.filter(v => {
+    if (!v.fecha) return false;
+    if (v.fecha < desde || v.fecha > hasta) return false;
+    if (filtroSede !== 'todas' && v.sede !== filtroSede) return false;
+    if (filtroFormaPago !== 'todas' && v.forma_pago !== filtroFormaPago) return false;
+    if (!coincideBusqueda(v, texto)) return false;
+    return true;
+  });
+}
+
+function pillFormaPago(fp) {
+  if (fp === 'Contado') return '<span class="pill contado">Contado</span>';
+  if (fp === 'Crédito') return '<span class="pill credito">Crédito</span>';
+  return '<span class="pill sin">—</span>';
+}
+
+function csvEscape(valor) {
+  const s = (valor === null || valor === undefined) ? '' : String(valor);
+  if (/[",\n;]/.test(s)) return '"' + s.replace(/"/g, '""') + '"';
+  return s;
+}
+
+function exportarCSV(filas) {
+  const encabezados = ['Fecha', 'Factura', 'Sede', 'Cliente', 'NIT/CC cliente', 'Vendedor', 'Código SAP', 'Producto', 'Cantidad', 'Valor', 'Forma de pago'];
+  const lineas = [encabezados.join(';')];
+  filas.forEach(v => {
+    lineas.push([
+      v.fecha || '', v.factura || '', v.sede || '', v.cliente || '', v.cliente_nit || '',
+      v.vendedor || '', v.codigo_sap || '', v.producto || '', v.cantidad ?? '', v.valor ?? '', v.forma_pago || '',
+    ].map(csvEscape).join(';'));
+  });
+  const blob = new Blob(['﻿' + lineas.join('\r\n')], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `registro-ventas_${hoyISO()}.csv`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+}
+
+function render() {
+  const filtradas = filtrarVentas();
+  const ordenadas = [...filtradas].sort((a, b) => (b.fecha || '').localeCompare(a.fecha || ''));
+  const totalValor = filtradas.reduce((acc, v) => acc + (Number(v.valor) || 0), 0);
+  const facturasUnicas = new Set(filtradas.map(v => v.factura)).size;
+  const totalContado = filtradas.filter(v => v.forma_pago === 'Contado').reduce((acc, v) => acc + (Number(v.valor) || 0), 0);
+  const totalCredito = filtradas.filter(v => v.forma_pago === 'Crédito').reduce((acc, v) => acc + (Number(v.valor) || 0), 0);
+
+  document.getElementById('wrap').innerHTML = `
+    <div class="aviso">
+      ℹ️ Solo lectura desde SAP (histórico cargado por Diego desde "Cargar información"). A diferencia de "Resumen de venta" (1.3), aquí ves cada línea de producto por separado — útil para buscar una venta puntual, un cliente o un vendedor y exportar el detalle.
+    </div>
+
+    <div class="filtro-grupo">
+      <span class="filtro-label">Rango de fecha</span>
+      ${RANGOS.map(r => `<button class="filtro-chip ${r.id === filtroRango ? 'act' : ''}" data-rango="${r.id}">${r.nombre}</button>`).join('')}
+    </div>
+    ${filtroRango === 'custom' ? `
+    <div class="rango-custom">
+      <input type="date" id="f-desde" value="${customDesde}"> <span>a</span> <input type="date" id="f-hasta" value="${customHasta}">
+    </div>` : ''}
+    ${filtroRango === 'elegir-mes' ? `
+    <div class="rango-custom">
+      <input type="month" id="f-mes" value="${mesElegido}">
+    </div>` : ''}
+    <div class="filtro-grupo">
+      <span class="filtro-label">Sede</span>
+      <button class="filtro-chip ${filtroSede === 'todas' ? 'act' : ''}" data-sede="todas">Todas las sedes</button>
+      ${SEDES.map(s => `<button class="filtro-chip ${s === filtroSede ? 'act' : ''}" data-sede="${s}">📍 ${s}</button>`).join('')}
+    </div>
+    <div class="filtro-grupo">
+      <span class="filtro-label">Forma de pago</span>
+      ${FORMAS_PAGO.map(f => `<button class="filtro-chip ${f.id === filtroFormaPago ? 'act' : ''}" data-forma="${f.id}">${f.nombre}</button>`).join('')}
+    </div>
+
+    <div class="busca-row">
+      <input type="text" id="f-busca" placeholder="Buscar por cliente o vendedor..." value="${busqueda.replace(/"/g, '&quot;')}">
+      <button class="btn-exportar" id="btn-exportar" ${filtradas.length ? '' : 'disabled'}>⬇️ Exportar CSV (${filtradas.length})</button>
+    </div>
+
+    <div class="indicadores">
+      <div class="ind"><b>${fmtMoneda(totalValor)}</b><span>Total del filtro</span></div>
+      <div class="ind"><b>${facturasUnicas}</b><span>N.º de facturas</span></div>
+      <div class="ind"><b>${filtradas.length}</b><span>Líneas de producto</span></div>
+      <div class="ind"><b>${fmtMoneda(totalContado)}</b><span>Contado</span></div>
+      <div class="ind"><b>${fmtMoneda(totalCredito)}</b><span>Crédito</span></div>
+    </div>
+
+    <div class="card">
+      <h3>🧾 Detalle línea por línea</h3>
+      <div class="sub">${filtradas.length} línea${filtradas.length === 1 ? '' : 's'} encontrada${filtradas.length === 1 ? '' : 's'} con este filtro</div>
+      ${ordenadas.length ? `
+      <div class="tabla-scroll">
+      <table>
+        <thead><tr>
+          <th>Fecha</th><th>Factura</th><th>Sede</th><th>Cliente</th><th>Vendedor</th>
+          <th>Producto</th><th class="num">Cantidad</th><th class="num">Valor</th><th>Pago</th>
+        </tr></thead>
+        <tbody>
+          ${ordenadas.slice(0, FILAS_EN_PANTALLA).map(v => `
+            <tr>
+              <td>${v.fecha || '—'}</td>
+              <td>${v.factura || '—'}</td>
+              <td>${v.sede || '<span style="color:#bbb">sin sede</span>'}</td>
+              <td>${v.cliente || '—'}</td>
+              <td>${v.vendedor || '—'}</td>
+              <td class="prod">${v.producto || '—'}</td>
+              <td class="num">${v.cantidad ?? '—'}</td>
+              <td class="num">${fmtMoneda(v.valor)}</td>
+              <td>${pillFormaPago(v.forma_pago)}</td>
+            </tr>
+          `).join('')}
+        </tbody>
+      </table>
+      </div>
+      ${ordenadas.length > FILAS_EN_PANTALLA ? `<div class="nota-mas">Mostrando las primeras ${FILAS_EN_PANTALLA} de ${ordenadas.length} líneas — acota el filtro para ver el resto en pantalla, o usa "Exportar CSV" para descargar todas.</div>` : ''}
+      ` : `<div class="vacio">No se encontraron ventas con ese filtro.</div>`}
+    </div>
+  `;
+
+  document.querySelectorAll('[data-rango]').forEach(btn => {
+    btn.addEventListener('click', () => { filtroRango = btn.dataset.rango; render(); });
+  });
+  document.querySelectorAll('[data-sede]').forEach(btn => {
+    btn.addEventListener('click', () => { filtroSede = btn.dataset.sede; render(); });
+  });
+  document.querySelectorAll('[data-forma]').forEach(btn => {
+    btn.addEventListener('click', () => { filtroFormaPago = btn.dataset.forma; render(); });
+  });
+  document.getElementById('f-desde')?.addEventListener('change', (e) => { customDesde = e.target.value; render(); });
+  document.getElementById('f-hasta')?.addEventListener('change', (e) => { customHasta = e.target.value; render(); });
+  document.getElementById('f-mes')?.addEventListener('change', (e) => { mesElegido = e.target.value; render(); });
+  const inputBusca = document.getElementById('f-busca');
+  inputBusca?.addEventListener('input', (e) => {
+    busqueda = e.target.value;
+    const cursor = e.target.selectionStart;
+    render();
+    const nuevo = document.getElementById('f-busca');
+    if (nuevo) { nuevo.focus(); nuevo.setSelectionRange(cursor, cursor); }
+  });
+  document.getElementById('btn-exportar')?.addEventListener('click', () => {
+    exportarCSV(filtrarVentas());
+  });
+}
+
+(async () => {
+  const { data: { session } } = await sb.auth.getSession();
+  if (!session) { window.location.href = 'login.html'; return; }
+  const userId = session.user.id;
+  const [{ data: perfil }, { data: permisos }] = await Promise.all([
+    sb.from('perfiles').select('*').eq('id', userId).single(),
+    sb.from('permisos_modulo').select('*').eq('perfil_id', userId),
+  ]);
+  if (!perfil) {
+    document.getElementById('wrap').innerHTML = '<div class="loading">Tu usuario no tiene un perfil configurado todavía.</div>';
+    return;
+  }
+  const esSuperAdmin = perfil.es_super_admin;
+  const nivel2 = (permisos || []).find(p => p.modulo === 2)?.nivel || 'inactivo';
+  const puedeVer = esSuperAdmin || nivel2 !== 'inactivo';
+  if (!puedeVer) {
+    document.getElementById('wrap').innerHTML = '<div class="loading">No tienes permiso para ver este módulo.</div>';
+    return;
+  }
+
+  // Supabase/PostgREST limita cuantas filas devuelve UNA sola consulta
+  // (tope del proyecto, tipicamente 1000), sin importar el .limit() que se
+  // pida desde el cliente -- por eso hay que traer todo en paginas con
+  // .range() hasta que una pagina vuelva incompleta.
+  let ventasCargadas = [];
+  let errVentas = null;
+  const PAGINA = 1000;
+  let desde = 0;
+  while (true) {
+    const { data, error } = await sb.from('ventas')
+      .select('fecha,factura,codigo_sap,producto,cantidad,valor,cliente,cliente_nit,vendedor,sede,forma_pago')
+      .order('fecha', { ascending: false })
+      .range(desde, desde + PAGINA - 1);
+    if (error) { errVentas = error; break; }
+    ventasCargadas = ventasCargadas.concat(data || []);
+    if (!data || data.length < PAGINA) break;
+    desde += PAGINA;
+  }
+  if (errVentas) {
+    document.getElementById('wrap').innerHTML = '<div class="loading">No se pudo cargar el histórico de ventas: ' + errVentas.message + '</div>';
+    return;
+  }
+  ventas = ventasCargadas;
+
+  render();
+})();
+</script>
+
+</body>
+</html>

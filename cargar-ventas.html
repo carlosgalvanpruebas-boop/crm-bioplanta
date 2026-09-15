@@ -109,4 +109,200 @@ const ALIAS = {
   valor: ['ingreso total', 'valor total', 'valor', 'total', 'importe'],
   cliente: ['nombre de cliente/proveedor', 'nombre del cliente', 'razon social', 'razón social', 'cliente'],
   cliente_nit: ['codigo de cliente/proveedor', 'código de cliente/proveedor', 'nit', 'identificacion', 'identificación', 'cedula/nit', 'cédula/nit'],
-  vendedor: ['empleado de ventas', 'asesor',
+  vendedor: ['empleado de ventas', 'asesor', 'vendedor'],
+  ocr_code: ['ocrcode', 'centro de costo', 'centro de costo (ocrcode)'],
+  ocr_code2: ['ocrcode2'],
+  cancelado: ['cancelado'],
+};
+
+function sedeDeCentroCosto(valor) {
+  const v = String(valor || '').trim().toUpperCase();
+  if (v === 'CHIGOROD' || v === 'CAREPA') return 'Chigorodó';
+  if (v === 'BAJIRA' || v === 'BAJIRÁ') return 'Belén de Bajirá';
+  return null;
+}
+function normaliza(s) {
+  return String(s || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim();
+}
+function mapaColumnas(headers) {
+  const norm = headers.map(normaliza);
+  const mapa = {};
+  Object.entries(ALIAS).forEach(([campo, alias]) => {
+    for (const a of alias) {
+      const idx = norm.indexOf(a);
+      if (idx !== -1) { mapa[campo] = headers[idx]; break; }
+    }
+  });
+  return mapa;
+}
+
+let filas = [];
+let sesionActual = null;
+let mensajeResultado = '';
+
+function render() {
+  const preview = filas.slice(0, 5);
+  const cols = preview.length ? Object.keys(preview[0]) : [];
+
+  document.getElementById('wrap').innerHTML = `
+    <div class="aviso">
+      ℹ️ Esta pantalla <b>agrega</b> al histórico de ventas — no reemplaza ni borra nada (a diferencia de la carga de inventario). Si subes el mismo archivo dos veces, o rangos de fecha que se solapan, las líneas repetidas (misma factura + mismo artículo) se actualizan, no se duplican. Los artículos de grupos ya marcados como "no son de Agrotienda" (ver carga de inventario) se excluyen automáticamente, igual que las filas canceladas y las de otras áreas del centro de costo (OcrCode2 distinto de "Comercial"). La sede se toma del centro de costo real de SAP (Carepa se trata como Chigorodó, por el traslado). Contado/Crédito se calcula solo: mismo día entre fecha de contabilización y fecha de vencimiento = Contado, con plazo = Crédito.
+    </div>
+    <div class="card">
+      <h3>1. Selecciona el archivo Excel</h3>
+      <div class="drop">
+        📄 Arrastra o selecciona el archivo de ventas exportado de SAP (.xlsx)
+        <br><input type="file" id="f-archivo" accept=".xlsx,.xls">
+      </div>
+      ${mensajeResultado}
+    </div>
+    ${filas.length ? `
+    <div class="card">
+      <h3>2. Vista previa (${filas.length} líneas detectadas)</h3>
+      <table>
+        <thead><tr>${cols.map(c => `<th>${c}</th>`).join('')}</tr></thead>
+        <tbody>
+          ${preview.map(f => `<tr>${cols.map(c => `<td>${f[c] ?? '—'}</td>`).join('')}</tr>`).join('')}
+        </tbody>
+      </table>
+      <button class="btn" id="btn-confirmar" style="margin-top:14px">✅ Confirmar y cargar ${filas.length} líneas</button>
+      <button class="btn btn-sec" id="btn-cancelar" style="margin-top:14px">Cancelar</button>
+    </div>` : ''}
+    <div class="card">
+      <h3>Historial de cargas</h3>
+      <div id="historial">Cargando historial...</div>
+    </div>
+  `;
+  bind();
+  cargarHistorial();
+}
+
+function bind() {
+  document.getElementById('f-archivo')?.addEventListener('change', async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    mensajeResultado = '';
+    const buf = await file.arrayBuffer();
+    const wb = XLSX.read(buf, { type: 'array', cellDates: true });
+    const hoja = wb.Sheets[wb.SheetNames[0]];
+    const json = XLSX.utils.sheet_to_json(hoja, { defval: null });
+    if (!json.length) { alert('El archivo no tiene filas.'); return; }
+
+    const headers = Object.keys(json[0]);
+    const mapa = mapaColumnas(headers);
+    if (!mapa.factura || !mapa.producto) {
+      alert('No se encontró una columna de factura y/o descripción del producto. Revisa que el archivo tenga esos datos, o avísale a Claude para ajustar los nombres de columna reconocidos.');
+      return;
+    }
+
+    filas = json.map(row => ({
+      factura: String(row[mapa.factura] || '').trim(),
+      producto: String(row[mapa.producto] || '').trim(),
+      codigo_sap: mapa.codigo_sap ? String(row[mapa.codigo_sap] || '').trim() : '',
+      fecha: mapa.fecha ? row[mapa.fecha] : null,
+      fecha_vencimiento: mapa.fecha_vencimiento ? row[mapa.fecha_vencimiento] : null,
+      cantidad: mapa.cantidad ? row[mapa.cantidad] : 0,
+      valor: mapa.valor ? row[mapa.valor] : 0,
+      cliente: mapa.cliente ? String(row[mapa.cliente] || '').trim() : null,
+      cliente_nit: mapa.cliente_nit ? String(row[mapa.cliente_nit] || '').trim() : null,
+      vendedor: mapa.vendedor ? String(row[mapa.vendedor] || '').trim() : null,
+      sede: mapa.ocr_code ? sedeDeCentroCosto(row[mapa.ocr_code]) : null,
+      _ocrCode2: mapa.ocr_code2 ? String(row[mapa.ocr_code2] || '').trim().toUpperCase() : '',
+      _cancelado: mapa.cancelado ? String(row[mapa.cancelado] || '').trim().toUpperCase() : '',
+    }))
+      .filter(f => f.factura && f.producto)
+      .filter(f => !f._cancelado || f._cancelado === 'N')
+      .filter(f => !f._ocrCode2 || f._ocrCode2 === 'COMERCIA')
+      .map(({ _ocrCode2, _cancelado, ...resto }) => ({ ...resto, cancelado: _cancelado }));
+
+    render();
+  });
+
+  document.getElementById('btn-cancelar')?.addEventListener('click', () => {
+    filas = [];
+    mensajeResultado = '';
+    render();
+  });
+
+  document.getElementById('btn-confirmar')?.addEventListener('click', async () => {
+    const btn = document.getElementById('btn-confirmar');
+    btn.disabled = true;
+    btn.textContent = 'Cargando...';
+    try {
+      const resp = await fetch('/api/cargar-ventas', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${sesionActual.access_token}`,
+        },
+        body: JSON.stringify({ ventas: filas }),
+      });
+      const data = await resp.json();
+      if (!resp.ok) {
+        mensajeResultado = `<div class="msg err">❌ ${data.error || 'No se pudo cargar'}</div>`;
+      } else {
+        mensajeResultado = `
+          <div class="resumen">
+            <span class="chip-r nuevo">${data.procesadas} procesadas</span>
+            ${data.omitidosPorCancelado ? `<span class="chip-r elim">${data.omitidosPorCancelado} omitidas (canceladas)</span>` : ''}
+            ${data.omitidosPorGrupo ? `<span class="chip-r elim">${data.omitidosPorGrupo} omitidas (grupos excluidos)</span>` : ''}
+            ${data.duplicadosColapsados ? `<span class="chip-r">${data.duplicadosColapsados} duplicadas en el archivo</span>` : ''}
+            ${data.sinFacturaOProducto ? `<span class="chip-r elim">${data.sinFacturaOProducto} sin factura/producto</span>` : ''}
+          </div>
+          <div class="msg ok">✅ Ventas cargadas correctamente.</div>
+        `;
+        filas = [];
+      }
+    } catch (e) {
+      mensajeResultado = `<div class="msg err">❌ Error de red: ${e.message}</div>`;
+    }
+    render();
+    cargarHistorial();
+  });
+}
+
+function fmtFechaHora(iso) {
+  if (!iso) return '—';
+  return new Date(iso).toLocaleString('es-CO', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+}
+
+async function cargarHistorial() {
+  const el = document.getElementById('historial');
+  if (!el) return;
+  const { data, error } = await sb.from('sync_log').select('*').eq('modulo', 'ventas').order('fecha', { ascending: false }).limit(10);
+  if (error) { el.innerHTML = `<div style="color:#999;font-size:12px">No se pudo cargar el historial.</div>`; return; }
+  if (!data || !data.length) { el.innerHTML = `<div style="color:#999;font-size:12px">Todavía no hay cargas registradas.</div>`; return; }
+  el.innerHTML = data.map(l => `
+    <div class="hist-row">
+      <span>${fmtFechaHora(l.fecha)}</span>
+      <span style="flex:1;padding:0 10px">${l.mensaje || '—'}</span>
+      <span class="hist-estado ${l.status === 'ok' ? 'hist-ok' : 'hist-error'}">${l.status}</span>
+    </div>
+  `).join('');
+}
+
+(async () => {
+  const { data: { session } } = await sb.auth.getSession();
+  if (!session) { window.location.href = 'login.html'; return; }
+  sesionActual = session;
+
+  const { data: perfil } = await sb.from('perfiles').select('*').eq('id', session.user.id).single();
+  if (!perfil) {
+    document.getElementById('wrap').innerHTML = '<div class="loading">Tu usuario no tiene un perfil configurado todavía.</div>';
+    return;
+  }
+
+  const cargo = (perfil.cargo || '').toLowerCase();
+  const autorizado = perfil.es_super_admin || cargo.includes('almacén') || cargo.includes('almacen');
+
+  if (!autorizado) {
+    document.getElementById('wrap').innerHTML = '<div class="loading">No tienes permiso para usar esta pantalla.</div>';
+    return;
+  }
+
+  render();
+})();
+</script>
+
+</body>
+</html>

@@ -112,6 +112,7 @@ const ALIAS = {
   vendedor: ['empleado de ventas', 'asesor', 'vendedor'],
   ocr_code: ['ocrcode', 'centro de costo', 'centro de costo (ocrcode)'],
   ocr_code2: ['ocrcode2'],
+  ocr_code3: ['ocrcode3'],
   cancelado: ['cancelado'],
 };
 
@@ -146,7 +147,7 @@ function render() {
 
   document.getElementById('wrap').innerHTML = `
     <div class="aviso">
-      ℹ️ Esta pantalla <b>agrega</b> al histórico de ventas — no reemplaza ni borra nada (a diferencia de la carga de inventario). Si subes el mismo archivo dos veces, o rangos de fecha que se solapan, las líneas repetidas (misma factura + mismo artículo) se actualizan, no se duplican. Los artículos de grupos ya marcados como "no son de Agrotienda" (ver carga de inventario) se excluyen automáticamente, igual que las filas canceladas y las de otras áreas del centro de costo (OcrCode2 distinto de "Comercial"). La sede se toma del centro de costo real de SAP (Carepa se trata como Chigorodó, por el traslado). Contado/Crédito se calcula solo: mismo día entre fecha de contabilización y fecha de vencimiento = Contado, con plazo = Crédito.
+      ℹ️ Esta pantalla <b>agrega</b> al histórico de ventas — no reemplaza ni borra nada (a diferencia de la carga de inventario). Si subes el mismo archivo dos veces, o rangos de fecha que se solapan, las líneas repetidas (misma factura + mismo artículo) se actualizan, no se duplican. Solo se cargan filas con <b>OcrCode3 = C30 o C31</b> (los 2 centros de costo reales de la agrotienda) y <b>Cancelado = N</b>; los artículos de grupos ya marcados como "no son de Agrotienda" (ver carga de inventario) y las filas de otras áreas del centro de costo (OcrCode2 distinto de "Comercial") también se excluyen automáticamente. La sede se toma del centro de costo real de SAP (Carepa se trata como Chigorodó, por el traslado). Contado/Crédito se calcula solo: mismo día entre fecha de contabilización y fecha de vencimiento = Contado, con plazo = Crédito.
     </div>
     <div class="card">
       <h3>1. Selecciona el archivo Excel</h3>
@@ -194,6 +195,12 @@ function bind() {
       alert('No se encontró una columna de factura y/o descripción del producto. Revisa que el archivo tenga esos datos, o avísale a Claude para ajustar los nombres de columna reconocidos.');
       return;
     }
+    if (!mapa.ocr_code3) {
+      alert('No se encontró la columna OcrCode3 en el archivo. Es necesaria para saber si la venta es de la agrotienda (C30/C31) o de otro negocio del mismo SAP — sin ella no se puede cargar con seguridad. Avísale a Claude si el archivo trae otro nombre de columna.');
+      return;
+    }
+
+    const totalFilasArchivo = json.length;
 
     filas = json.map(row => ({
       factura: String(row[mapa.factura] || '').trim(),
@@ -207,13 +214,23 @@ function bind() {
       cliente_nit: mapa.cliente_nit ? String(row[mapa.cliente_nit] || '').trim() : null,
       vendedor: mapa.vendedor ? String(row[mapa.vendedor] || '').trim() : null,
       sede: mapa.ocr_code ? sedeDeCentroCosto(row[mapa.ocr_code]) : null,
+      ocr_code3: String(row[mapa.ocr_code3] || '').trim().toUpperCase(),
       _ocrCode2: mapa.ocr_code2 ? String(row[mapa.ocr_code2] || '').trim().toUpperCase() : '',
       _cancelado: mapa.cancelado ? String(row[mapa.cancelado] || '').trim().toUpperCase() : '',
     }))
       .filter(f => f.factura && f.producto)
+      .filter(f => f.ocr_code3 === 'C30' || f.ocr_code3 === 'C31')
       .filter(f => !f._cancelado || f._cancelado === 'N')
       .filter(f => !f._ocrCode2 || f._ocrCode2 === 'COMERCIA')
       .map(({ _ocrCode2, _cancelado, ...resto }) => ({ ...resto, cancelado: _cancelado }));
+
+    const omitidasPorOcrCode3Cliente = totalFilasArchivo - json.filter(row => {
+      const v = String(row[mapa.ocr_code3] || '').trim().toUpperCase();
+      return v === 'C30' || v === 'C31';
+    }).length;
+    mensajeResultado = omitidasPorOcrCode3Cliente
+      ? `<div class="msg" style="background:#fff3d6;color:#7a5b00">ℹ️ ${omitidasPorOcrCode3Cliente} de ${totalFilasArchivo} filas del archivo no tienen OcrCode3 = C30/C31 y no se incluyen en la vista previa.</div>`
+      : '';
 
     render();
   });
@@ -244,6 +261,7 @@ function bind() {
         mensajeResultado = `
           <div class="resumen">
             <span class="chip-r nuevo">${data.procesadas} procesadas</span>
+            ${data.omitidosPorOcrCode3 ? `<span class="chip-r elim">${data.omitidosPorOcrCode3} omitidas (OcrCode3 distinto de C30/C31)</span>` : ''}
             ${data.omitidosPorCancelado ? `<span class="chip-r elim">${data.omitidosPorCancelado} omitidas (canceladas)</span>` : ''}
             ${data.omitidosPorGrupo ? `<span class="chip-r elim">${data.omitidosPorGrupo} omitidas (grupos excluidos)</span>` : ''}
             ${data.duplicadosColapsados ? `<span class="chip-r">${data.duplicadosColapsados} duplicadas en el archivo</span>` : ''}

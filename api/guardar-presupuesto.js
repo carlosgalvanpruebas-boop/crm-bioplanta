@@ -6,6 +6,15 @@
 // Supabase. Solo Gerencia (Super Admin) puede definir la meta de
 // venta mensual de cada sede — guarda una fila por (año, mes, sede)
 // en `presupuesto_venta` (Fase 38).
+//
+// Fase 39: cada fila también guarda `punto_equilibrio` — el monto
+// mensual que la sede debe vender SOLO en contado para cubrirse (el
+// crédito ya es utilidad de los dueños y no cuenta). Es un campo
+// aparte del presupuesto general (`monto`, que sí suma contado y
+// crédito); el frontend de 3.1 divide este valor entre las semanas
+// del mes para comparar semana a semana. Es opcional: si no se
+// manda, queda en 0 y 3.1 simplemente no muestra esa sección para
+// esa sede/mes.
 // ============================================================
 
 const { createClient } = require('@supabase/supabase-js');
@@ -64,7 +73,7 @@ module.exports = async (req, res) => {
     const body = req.body || {};
     const anio = numeroOr(body.anio, null);
     const mes = numeroOr(body.mes, null);
-    const metas = Array.isArray(body.metas) ? body.metas : null; // [{ sede, monto }, ...]
+    const metas = Array.isArray(body.metas) ? body.metas : null; // [{ sede, monto, punto_equilibrio }, ...]
 
     if (!anio || !mes || !metas || !metas.length) {
       return res.status(400).json({ error: 'Faltan año, mes o las metas por sede' });
@@ -80,7 +89,11 @@ module.exports = async (req, res) => {
       if (monto === null || monto < 0) {
         return res.status(400).json({ error: `El monto de ${sede} no es válido` });
       }
-      filas.push({ anio, mes, sede, monto });
+      const puntoEquilibrio = numeroOr(m.punto_equilibrio, 0);
+      if (puntoEquilibrio < 0) {
+        return res.status(400).json({ error: `El punto de equilibrio de ${sede} no es válido` });
+      }
+      filas.push({ anio, mes, sede, monto, punto_equilibrio: puntoEquilibrio });
     }
 
     const { error: upsertError } = await sbAdmin
@@ -94,7 +107,7 @@ module.exports = async (req, res) => {
       registros: filas.length,
       status: 'ok',
       mensaje: `Presupuesto de ${mes}/${anio} guardado por ${perfil.nombre}: ` +
-        filas.map(f => `${f.sede} $${f.monto.toLocaleString('es-CO')}`).join(', '),
+        filas.map(f => `${f.sede} $${f.monto.toLocaleString('es-CO')} (equilibrio $${f.punto_equilibrio.toLocaleString('es-CO')})`).join(', '),
     });
 
     return res.status(200).json({ ok: true, guardadas: filas.length });

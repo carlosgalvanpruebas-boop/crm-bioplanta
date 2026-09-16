@@ -18,6 +18,10 @@
 // `sap_prefijos_excluidos` (la misma lista que se usa en la carga
 // de inventario), para no ensuciar el histórico de ventas con
 // ventas de otro negocio que comparte el mismo SAP.
+//
+// Regla adicional confirmada por Carlos (16-sep-2026): solo se cargan
+// filas cuyo OcrCode3 sea "C30" o "C31" (los 2 centros de costo reales
+// de la agrotienda); todo lo demás, incluido vacío, se descarta.
 // ============================================================
 
 const { createClient } = require('@supabase/supabase-js');
@@ -54,6 +58,18 @@ function estaCancelado(valor) {
   const v = (valor === undefined || valor === null) ? '' : String(valor).trim().toUpperCase();
   if (!v) return false; // sin dato => no se bloquea
   return v !== 'N';
+}
+
+// Regla confirmada por Carlos (16-sep-2026): solo son ventas reales de la
+// agrotienda las filas cuyo OcrCode3 sea "C30" (Chigorodó) o "C31" (Belén
+// de Bajirá) — cualquier otro valor, incluido vacío, pertenece a otro
+// centro de costo del mismo SAP (extractora, viveros, semillas, etc.) y se
+// descarta. Ya se filtra en el navegador (cargar-ventas.html); esta función
+// es la segunda capa de protección aquí en el servidor, mismo patrón que
+// estaCancelado/estaExcluido.
+function esAlmacenValido(valor) {
+  const v = (valor === undefined || valor === null) ? '' : String(valor).trim().toUpperCase();
+  return v === 'C30' || v === 'C31';
 }
 
 function numeroOr(valor, porDefecto) {
@@ -143,6 +159,7 @@ module.exports = async (req, res) => {
     let omitidosPorGrupo = 0;
     let omitidosSinCodigo = 0;
     let omitidosPorCancelado = 0;
+    let omitidosPorOcrCode3 = 0;
     const limpiasMap = new Map(); // clave factura||codigo_sap -> fila (colapsa duplicados del mismo archivo)
     let sinFacturaOProducto = 0;
 
@@ -150,6 +167,8 @@ module.exports = async (req, res) => {
       const factura = (f.factura || '').toString().trim();
       const producto = (f.producto || '').toString().trim();
       if (!factura || !producto) { sinFacturaOProducto++; continue; }
+
+      if (!esAlmacenValido(f.ocr_code3)) { omitidosPorOcrCode3++; continue; }
 
       if (estaCancelado(f.cancelado)) { omitidosPorCancelado++; continue; }
 
@@ -180,7 +199,7 @@ module.exports = async (req, res) => {
     }
 
     const limpios = [...limpiasMap.values()];
-    const duplicadosColapsados = filas.length - sinFacturaOProducto - omitidosPorCancelado - omitidosPorGrupo - omitidosSinCodigo - limpios.length;
+    const duplicadosColapsados = filas.length - sinFacturaOProducto - omitidosPorOcrCode3 - omitidosPorCancelado - omitidosPorGrupo - omitidosSinCodigo - limpios.length;
 
     if (!limpios.length) {
       return res.status(400).json({ error: 'Ninguna fila tenía factura y producto válidos' });
@@ -196,12 +215,13 @@ module.exports = async (req, res) => {
       modulo: 'ventas',
       registros: limpios.length,
       status: 'ok',
-      mensaje: `Cargado por ${perfil.nombre}: ${limpios.length} líneas procesadas, ${omitidosPorCancelado} omitidas por estar canceladas, ${omitidosPorGrupo} omitidas por grupos excluidos, ${omitidosSinCodigo} omitidas por no traer código SAP, ${duplicadosColapsados} duplicadas dentro del mismo archivo, ${sinFacturaOProducto} sin factura/producto válidos`,
+      mensaje: `Cargado por ${perfil.nombre}: ${limpios.length} líneas procesadas, ${omitidosPorOcrCode3} omitidas por no ser OcrCode3 C30/C31, ${omitidosPorCancelado} omitidas por estar canceladas, ${omitidosPorGrupo} omitidas por grupos excluidos, ${omitidosSinCodigo} omitidas por no traer código SAP, ${duplicadosColapsados} duplicadas dentro del mismo archivo, ${sinFacturaOProducto} sin factura/producto válidos`,
     });
 
     return res.status(200).json({
       ok: true,
       procesadas: limpios.length,
+      omitidosPorOcrCode3,
       omitidosPorCancelado,
       omitidosPorGrupo,
       omitidosSinCodigo,

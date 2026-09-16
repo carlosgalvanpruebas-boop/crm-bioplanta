@@ -142,7 +142,7 @@ function render() {
   document.getElementById('wrap').innerHTML = `
     <div class="aviso">
       ℹ️ Aquí conviven dos metas distintas por sede, cada una con su propio uso:<br>
-      <b>Meta de venta total</b> (contado + crédito): se usa en 1.3 (Resumen de venta, sumada entre las dos sedes) y en 3.1 (cumplimiento de presupuesto por sede).<br>
+      <b>Meta de venta total</b>: en 1.3 (Resumen de venta) se suma entre las dos sedes y se compara contra el total vendido de toda la agrotienda (contado + crédito). En 3.1 (cumplimiento de presupuesto por sede) esa misma meta se compara solo contra las ventas de contado de esa sede — el crédito no cuenta para el cumplimiento individual de una sede.<br>
       <b>Punto de equilibrio</b> (solo ventas de contado — el crédito ya es utilidad de los dueños): se usa en 3.1 para el seguimiento semana a semana de cada sede. Es opcional; si lo dejas vacío, 3.1 simplemente no muestra esa comparación para el mes.<br>
       Ninguna de las dos reemplaza ni edita ventas reales — solo definen el objetivo del mes.
     </div>

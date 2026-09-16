@@ -340,11 +340,15 @@ function render() {
 
     <div class="card">
       <h3>🎯 Cumplimiento de presupuesto por sede</h3>
-      <div class="sub">Mes en curso (día ${diaDelMes} de ${diasDelMes}) — no depende del rango de arriba</div>
+      <div class="sub">Mes en curso (día ${diaDelMes} de ${diasDelMes}) — no depende del rango de arriba. Se mide solo con ventas de contado; el crédito no cuenta para la meta de la sede.</div>
       <div class="presu-grid">
         ${SEDES.map(sede => {
           const meta = presupuestoPorSede[sede]?.monto || null;
-          const vendidoMes = porSedeMes[sede].total;
+          // La meta de cada sede se mide solo contra contado — el crédito
+          // no cuenta para el cumplimiento de la sede (es utilidad de los
+          // dueños). El total contado+crédito solo se usa en 1.3, a nivel
+          // de toda la agrotienda.
+          const vendidoMes = porSedeMes[sede].contado;
           const pct = meta ? Math.round((vendidoMes / meta) * 1000) / 10 : null;
           return `
           <div class="presu-item">
@@ -353,7 +357,7 @@ function render() {
               <div class="presu-pct">${pct}%</div>
               <div class="presu-barra"><div class="presu-fill ${pct >= 100 ? 'superado' : ''}" style="width:${Math.min(pct, 100)}%"></div></div>
               <div class="presu-datos">
-                <span>${fmtMoneda(vendidoMes)} de ${fmtMoneda(meta)}</span>
+                <span>${fmtMoneda(vendidoMes)} de ${fmtMoneda(meta)} (solo contado)</span>
               </div>
             ` : `<div class="vacio" style="padding:16px 0">Sin presupuesto cargado para este mes.</div>`}
           </div>`;

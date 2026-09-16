@@ -288,10 +288,17 @@ function svgSemanal(semanas) {
     const y = alto - h;
     const yMeta = alto - s.meta * escala;
     const alcanzo = s.contado >= s.meta;
+    // El número de la meta va pegado a la línea punteada: adentro de la
+    // barra (en blanco) si la barra ya la superó, o justo encima (en
+    // verde oscuro) si todavía no llega — así no se monta con el número
+    // del valor real que va arriba de la barra.
+    const yTextoMeta = alcanzo ? yMeta + 11 : yMeta - 4;
+    const colorTextoMeta = alcanzo ? '#fff' : '#33513a';
     return `
       <text x="${x + anchoBarra / 2}" y="${y - 6}" text-anchor="middle" font-size="10.5" font-weight="700" fill="${alcanzo ? '#256d3b' : '#984745'}">${(s.contado / 1000000).toFixed(1)}M</text>
       <rect x="${x}" y="${y}" width="${anchoBarra}" height="${h}" rx="4" fill="${alcanzo ? '#4f7c5a' : '#c97b78'}"></rect>
       <line x1="${x - 3}" y1="${yMeta}" x2="${x + anchoBarra + 3}" y2="${yMeta}" stroke="#33513a" stroke-width="1.5" stroke-dasharray="4,3"></line>
+      <text x="${x + anchoBarra / 2}" y="${yTextoMeta}" text-anchor="middle" font-size="9" font-weight="700" fill="${colorTextoMeta}">Meta ${(s.meta / 1000000).toFixed(1)}M</text>
       <text x="${x + anchoBarra / 2}" y="${alto + 16}" text-anchor="middle" font-size="10.5" fill="#888">Sem. ${s.semana}</text>
     `;
   }).join('');
@@ -378,11 +385,16 @@ function render() {
     </div>
 
     <div class="card">
-      <h3>📉 Punto de equilibrio semanal — solo ventas de contado</h3>
-      <div class="sub">${etiquetaRango}, semana a semana. El crédito no cuenta aquí — se considera utilidad de los dueños, no lo que sostiene la sede. La muesca punteada sobre cada barra es la meta de esa semana.</div>
-      <div class="sedes-grid">
+      <h3>📉 Punto de equilibrio — solo ventas de contado</h3>
+      <div class="sub">${etiquetaRango}. El punto de equilibrio mensual se prorratea por día (ej.: meta de $100 millones ÷ 30 días del mes = $3,3 millones diarios) y se suma a los días del rango elegido arriba. El crédito no cuenta aquí — se considera utilidad de los dueños.</div>
+      <div class="presu-grid">
         ${SEDES.map(sede => {
-          const { porSemana: metaPorSemana, faltan } = prorratearPorDia(sede, desde, hasta, 'punto_equilibrio');
+          const { total: metaRango, porSemana: metaPorSemana, faltan } = prorratearPorDia(sede, desde, hasta, 'punto_equilibrio');
+          if (!metaRango) return `<div class="presu-item"><div class="presu-nom">📍 ${sede}</div><div class="vacio" style="padding:16px 0">Sin punto de equilibrio cargado para este rango.</div></div>`;
+
+          const vendidoRango = porSede[sede].contado;
+          const pct = Math.round((vendidoRango / metaRango) * 1000) / 10;
+
           const actualPorSemana = {};
           filtradas.forEach(v => {
             if (v.sede !== sede || v.forma_pago !== 'Contado') return;
@@ -391,17 +403,19 @@ function render() {
           });
           const numerosSemana = Array.from(new Set([...Object.keys(metaPorSemana), ...Object.keys(actualPorSemana)].map(Number))).sort((a, b) => a - b);
           const semanas = numerosSemana.map(s => ({ semana: s, contado: actualPorSemana[s] || 0, meta: metaPorSemana[s] || 0 }));
-          const totalMeta = semanas.reduce((acc, s) => acc + s.meta, 0);
-
-          if (!totalMeta) return `<div><div class="presu-nom" style="margin-bottom:6px">📍 ${sede}</div><div class="vacio" style="padding:16px 0">Sin punto de equilibrio cargado para este rango.</div></div>`;
-
-          const semanasAlcanzadas = semanas.filter(s => s.contado >= s.meta).length;
           const demasiadasSemanas = semanas.length > 14;
+
           return `
-          <div>
-            <div class="presu-nom" style="margin-bottom:2px">📍 ${sede}</div>
-            <div class="sede-sub" style="margin-bottom:8px">${semanasAlcanzadas} de ${semanas.length} semana${semanas.length === 1 ? '' : 's'} por encima de su meta${faltan ? ' · faltan meses con punto de equilibrio en este rango' : ''}</div>
-            ${demasiadasSemanas ? `<div class="vacio" style="padding:16px 0">El rango elegido tiene ${semanas.length} semanas — elige un rango más corto (por ejemplo, un mes) para ver el detalle semana a semana.</div>` : (semanas.length ? svgSemanal(semanas) : '<div class="vacio" style="padding:16px 0">Aún no hay ventas de contado registradas en este rango.</div>')}
+          <div class="presu-item">
+            <div class="presu-nom">📍 ${sede}</div>
+            <div class="presu-pct">${pct}%</div>
+            <div class="presu-barra"><div class="presu-fill ${pct >= 100 ? 'superado' : ''}" style="width:${Math.min(pct, 100)}%"></div></div>
+            <div class="presu-datos">
+              <span>${fmtMoneda(vendidoRango)} de ${fmtMoneda(metaRango)} (punto de equilibrio del rango)${faltan ? ' · faltan meses con punto de equilibrio en este rango' : ''}</span>
+            </div>
+            ${demasiadasSemanas
+              ? `<div class="vacio" style="padding:16px 0">El rango elegido tiene ${semanas.length} semanas — elige un rango más corto (por ejemplo, un mes) para ver el detalle semana a semana.</div>`
+              : (semanas.length > 1 ? `<div style="margin-top:14px">${svgSemanal(semanas)}</div>` : '')}
           </div>`;
         }).join('')}
       </div>

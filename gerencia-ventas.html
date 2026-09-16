@@ -116,7 +116,10 @@ const RANGOS = [
 ];
 
 let ventas = [];
-let presupuestoPorSede = {}; // { 'Chigorodó': { monto, punto_equilibrio }, ... } del mes en curso
+// Todo el historial de presupuesto_venta, indexado para poder prorratear
+// cualquier rango de fechas (no solo el mes en curso):
+// { 'Chigorodó': { '2026-9': { monto, punto_equilibrio }, ... }, ... }
+let presupuestoTodo = {};
 let filtroRango = 'mes';
 let customDesde = '';
 let customHasta = '';
@@ -222,62 +225,79 @@ function isoSemanaNumero(fechaISO) {
   return 1 + Math.round((d - primerJueves) / (7 * 86400000));
 }
 
-// Todas las semanas ISO que tocan el mes (anio, mes 1-12), completo,
-// para repartir el punto de equilibrio mensual en partes iguales.
-function semanasDelMesCompleto(anio, mes) {
-  const ultimoDia = new Date(anio, mes, 0).getDate();
-  const set = new Set();
-  for (let dia = 1; dia <= ultimoDia; dia++) {
-    set.add(isoSemanaNumero(`${anio}-${String(mes).padStart(2, '0')}-${String(dia).padStart(2, '0')}`));
-  }
-  return Array.from(set).sort((a, b) => a - b);
+function diasEnMes(anio, mes) {
+  return new Date(anio, mes, 0).getDate();
 }
 
-// Ventas de contado de una sede, agrupadas por semana ISO, solo para
-// las semanas que ya empezaron (no muestra semanas futuras del mes en curso).
-function contadoPorSemana(ventasDelMes, sede, anio, mes) {
-  const hoy = new Date();
-  const esMesActual = anio === hoy.getFullYear() && mes === hoy.getMonth() + 1;
-  const semanasCompletas = semanasDelMesCompleto(anio, mes);
-  const semanaHoy = isoSemanaNumero(hoyISO());
-  const semanas = esMesActual ? semanasCompletas.filter(s => s <= semanaHoy) : semanasCompletas;
+// Tasa diaria de un campo ('monto' o 'punto_equilibrio') de una sede,
+// para el mes al que pertenece esa fecha. null si no hay meta cargada
+// para ese mes.
+function tasaDiaria(sede, fechaISO, campo) {
+  const [anio, mes] = fechaISO.split('-').map(Number);
+  const fila = presupuestoTodo[sede]?.[`${anio}-${mes}`];
+  if (!fila || fila[campo] == null) return null;
+  return fila[campo] / diasEnMes(anio, mes);
+}
 
+// Recorre día por día el rango [desde,hasta] y prorratea una meta
+// mensual acorde a cuántos días de cada mes caen en ese rango — así
+// "Cumplimiento de presupuesto" y "Punto de equilibrio" siguen el
+// mismo rango de fecha elegido arriba, no solo el mes en curso.
+// Devuelve el total prorrateado, si falta meta en algún día del rango,
+// y el desglose por semana ISO (para la gráfica semanal).
+function prorratearPorDia(sede, desde, hasta, campo) {
+  let total = 0;
+  let faltan = false;
   const porSemana = {};
-  semanas.forEach(s => porSemana[s] = 0);
-  ventasDelMes.forEach(v => {
-    if (v.sede !== sede || v.forma_pago !== 'Contado') return;
-    const s = isoSemanaNumero(v.fecha);
-    if (s in porSemana) porSemana[s] += Number(v.valor) || 0;
-  });
-
-  return { semanas: semanas.map(s => ({ semana: s, contado: porSemana[s] })), totalSemanasDelMes: semanasCompletas.length };
+  let d = new Date(desde + 'T00:00:00');
+  const fin = new Date(hasta + 'T00:00:00');
+  while (d <= fin) {
+    const iso = d.toISOString().slice(0, 10);
+    const tasa = tasaDiaria(sede, iso, campo);
+    if (tasa == null) {
+      faltan = true;
+    } else {
+      total += tasa;
+      const sem = isoSemanaNumero(iso);
+      porSemana[sem] = (porSemana[sem] || 0) + tasa;
+    }
+    d.setDate(d.getDate() + 1);
+  }
+  return { total, faltan, porSemana };
 }
 
-// Mini gráfica de barras en SVG: una barra por semana, verde si alcanzó
-// la meta semanal, vino si quedó por debajo, con una línea punteada
-// marcando el punto de equilibrio semanal.
-function svgSemanal(semanas, metaSemanal) {
+function fmtFechaCorta(iso) {
+  return new Date(iso + 'T00:00:00').toLocaleDateString('es-CO', { day: '2-digit', month: 'short', year: 'numeric' });
+}
+
+// Mini gráfica de barras en SVG: una barra por semana (contado real),
+// verde si alcanzó la meta de esa semana, vino si quedó por debajo.
+// Cada semana trae su propia meta (semanas parciales en los bordes del
+// rango — o a caballo entre dos meses — no pesan igual que una semana
+// completa), marcada con una muesca punteada sobre su barra.
+// semanas: [{ semana, contado, meta }]
+function svgSemanal(semanas) {
   const anchoBarra = 46, espacio = 14, alto = 130, margenIzq = 4, margenSup = 10;
-  const maxValor = Math.max(metaSemanal, ...semanas.map(s => s.contado), 1) * 1.15;
+  const maxValor = Math.max(...semanas.map(s => Math.max(s.contado, s.meta)), 1) * 1.15;
   const escala = (alto - margenSup) / maxValor;
   const anchoTotal = semanas.length * (anchoBarra + espacio) + margenIzq;
-  const yLinea = alto - metaSemanal * escala;
 
   const barras = semanas.map((s, i) => {
     const x = margenIzq + i * (anchoBarra + espacio);
     const h = Math.max(s.contado * escala, 1);
     const y = alto - h;
-    const alcanzo = s.contado >= metaSemanal;
+    const yMeta = alto - s.meta * escala;
+    const alcanzo = s.contado >= s.meta;
     return `
       <text x="${x + anchoBarra / 2}" y="${y - 6}" text-anchor="middle" font-size="10.5" font-weight="700" fill="${alcanzo ? '#256d3b' : '#984745'}">${(s.contado / 1000000).toFixed(1)}M</text>
       <rect x="${x}" y="${y}" width="${anchoBarra}" height="${h}" rx="4" fill="${alcanzo ? '#4f7c5a' : '#c97b78'}"></rect>
+      <line x1="${x - 3}" y1="${yMeta}" x2="${x + anchoBarra + 3}" y2="${yMeta}" stroke="#33513a" stroke-width="1.5" stroke-dasharray="4,3"></line>
       <text x="${x + anchoBarra / 2}" y="${alto + 16}" text-anchor="middle" font-size="10.5" fill="#888">Sem. ${s.semana}</text>
     `;
   }).join('');
 
   return `
     <svg width="${anchoTotal}" height="${alto + 28}" viewBox="0 0 ${anchoTotal} ${alto + 28}" style="max-width:100%">
-      <line x1="0" y1="${yLinea}" x2="${anchoTotal}" y2="${yLinea}" stroke="#33513a" stroke-width="1.5" stroke-dasharray="5,4"></line>
       ${barras}
     </svg>
   `;
@@ -287,24 +307,14 @@ function render() {
   const [desde, hasta] = rangoFechas();
   const filtradas = filtrarPorRango(ventas, desde, hasta);
   const porSede = statsPorSede(filtradas);
-
-  // Cumplimiento de presupuesto por sede: siempre sobre el mes calendario
-  // en curso (igual que en 1.3), sin depender del filtro de arriba.
-  const inicioMes = inicioMesISO();
-  const hoy = hoyISO();
-  const diaDelMes = new Date().getDate();
-  const diasDelMes = new Date(new Date().getFullYear(), new Date().getMonth() + 1, 0).getDate();
-  const ventasMesActual = filtrarPorRango(ventas, inicioMes, hoy);
-  const porSedeMes = statsPorSede(ventasMesActual);
-  const anioActual = new Date().getFullYear();
-  const mesActual = new Date().getMonth() + 1;
+  const etiquetaRango = desde === hasta ? fmtFechaCorta(desde) : `${fmtFechaCorta(desde)} → ${fmtFechaCorta(hasta)}`;
 
   const meses = ultimosMeses(12);
   const filas = tablaMensual(ventas, meses);
 
   document.getElementById('wrap').innerHTML = `
     <div class="aviso">
-      ℹ️ Solo lectura desde SAP. No reemplaza 2.3 (Registro de ventas, detalle transaccional) — este es el consolidado ejecutivo que compara ambas sedes. El presupuesto es la meta que Gerencia define en "Configurar presupuesto"; si una sede no tiene meta cargada para el mes, se indica en vez de mostrar un porcentaje.
+      ℹ️ Solo lectura desde SAP. No reemplaza 2.3 (Registro de ventas, detalle transaccional) — este es el consolidado ejecutivo que compara ambas sedes. El presupuesto es la meta que Gerencia define en "Configurar presupuesto"; si una sede no tiene meta cargada para el rango elegido, se indica en vez de mostrar un porcentaje.
     </div>
 
     <div class="filtro-grupo">
@@ -340,16 +350,18 @@ function render() {
 
     <div class="card">
       <h3>🎯 Cumplimiento de presupuesto por sede</h3>
-      <div class="sub">Mes en curso (día ${diaDelMes} de ${diasDelMes}) — no depende del rango de arriba. Se mide solo con ventas de contado; el crédito no cuenta para la meta de la sede.</div>
+      <div class="sub">${etiquetaRango} — la meta mensual se prorratea a los días del rango elegido arriba. Se mide solo con ventas de contado; el crédito no cuenta para la meta de la sede.</div>
       <div class="presu-grid">
         ${SEDES.map(sede => {
-          const meta = presupuestoPorSede[sede]?.monto || null;
           // La meta de cada sede se mide solo contra contado — el crédito
           // no cuenta para el cumplimiento de la sede (es utilidad de los
           // dueños). El total contado+crédito solo se usa en 1.3, a nivel
-          // de toda la agrotienda.
-          const vendidoMes = porSedeMes[sede].contado;
-          const pct = meta ? Math.round((vendidoMes / meta) * 1000) / 10 : null;
+          // de toda la agrotienda. La meta mensual se prorratea día a día
+          // al rango elegido arriba (si el rango cruza meses, cada día usa
+          // la meta de su propio mes).
+          const { total: meta, faltan } = prorratearPorDia(sede, desde, hasta, 'monto');
+          const vendido = porSede[sede].contado;
+          const pct = meta ? Math.round((vendido / meta) * 1000) / 10 : null;
           return `
           <div class="presu-item">
             <div class="presu-nom">📍 ${sede}</div>
@@ -357,9 +369,9 @@ function render() {
               <div class="presu-pct">${pct}%</div>
               <div class="presu-barra"><div class="presu-fill ${pct >= 100 ? 'superado' : ''}" style="width:${Math.min(pct, 100)}%"></div></div>
               <div class="presu-datos">
-                <span>${fmtMoneda(vendidoMes)} de ${fmtMoneda(meta)} (solo contado)</span>
+                <span>${fmtMoneda(vendido)} de ${fmtMoneda(meta)} (solo contado)${faltan ? ' · faltan meses con presupuesto en este rango' : ''}</span>
               </div>
-            ` : `<div class="vacio" style="padding:16px 0">Sin presupuesto cargado para este mes.</div>`}
+            ` : `<div class="vacio" style="padding:16px 0">Sin presupuesto cargado para este rango.</div>`}
           </div>`;
         }).join('')}
       </div>
@@ -367,19 +379,29 @@ function render() {
 
     <div class="card">
       <h3>📉 Punto de equilibrio semanal — solo ventas de contado</h3>
-      <div class="sub">Mes en curso, semana a semana. El crédito no cuenta aquí — se considera utilidad de los dueños, no lo que sostiene la sede. Línea punteada = punto de equilibrio semanal.</div>
+      <div class="sub">${etiquetaRango}, semana a semana. El crédito no cuenta aquí — se considera utilidad de los dueños, no lo que sostiene la sede. La muesca punteada sobre cada barra es la meta de esa semana.</div>
       <div class="sedes-grid">
         ${SEDES.map(sede => {
-          const pe = presupuestoPorSede[sede]?.punto_equilibrio || 0;
-          if (!pe) return `<div><div class="presu-nom" style="margin-bottom:6px">📍 ${sede}</div><div class="vacio" style="padding:16px 0">Sin punto de equilibrio cargado para este mes.</div></div>`;
-          const { semanas, totalSemanasDelMes } = contadoPorSemana(ventasMesActual, sede, anioActual, mesActual);
-          const metaSemanal = pe / totalSemanasDelMes;
-          const semanasAlcanzadas = semanas.filter(s => s.contado >= metaSemanal).length;
+          const { porSemana: metaPorSemana, faltan } = prorratearPorDia(sede, desde, hasta, 'punto_equilibrio');
+          const actualPorSemana = {};
+          filtradas.forEach(v => {
+            if (v.sede !== sede || v.forma_pago !== 'Contado') return;
+            const s = isoSemanaNumero(v.fecha);
+            actualPorSemana[s] = (actualPorSemana[s] || 0) + (Number(v.valor) || 0);
+          });
+          const numerosSemana = Array.from(new Set([...Object.keys(metaPorSemana), ...Object.keys(actualPorSemana)].map(Number))).sort((a, b) => a - b);
+          const semanas = numerosSemana.map(s => ({ semana: s, contado: actualPorSemana[s] || 0, meta: metaPorSemana[s] || 0 }));
+          const totalMeta = semanas.reduce((acc, s) => acc + s.meta, 0);
+
+          if (!totalMeta) return `<div><div class="presu-nom" style="margin-bottom:6px">📍 ${sede}</div><div class="vacio" style="padding:16px 0">Sin punto de equilibrio cargado para este rango.</div></div>`;
+
+          const semanasAlcanzadas = semanas.filter(s => s.contado >= s.meta).length;
+          const demasiadasSemanas = semanas.length > 14;
           return `
           <div>
             <div class="presu-nom" style="margin-bottom:2px">📍 ${sede}</div>
-            <div class="sede-sub" style="margin-bottom:8px">Meta semanal ${fmtMoneda(metaSemanal)} · ${semanasAlcanzadas} de ${semanas.length} semana${semanas.length === 1 ? '' : 's'} por encima</div>
-            ${semanas.length ? svgSemanal(semanas, metaSemanal) : '<div class="vacio" style="padding:16px 0">Aún no hay ventas de contado registradas este mes.</div>'}
+            <div class="sede-sub" style="margin-bottom:8px">${semanasAlcanzadas} de ${semanas.length} semana${semanas.length === 1 ? '' : 's'} por encima de su meta${faltan ? ' · faltan meses con punto de equilibrio en este rango' : ''}</div>
+            ${demasiadasSemanas ? `<div class="vacio" style="padding:16px 0">El rango elegido tiene ${semanas.length} semanas — elige un rango más corto (por ejemplo, un mes) para ver el detalle semana a semana.</div>` : (semanas.length ? svgSemanal(semanas) : '<div class="vacio" style="padding:16px 0">Aún no hay ventas de contado registradas en este rango.</div>')}
           </div>`;
         }).join('')}
       </div>
@@ -438,7 +460,6 @@ function render() {
     `;
   }
 
-  const hoy = new Date();
   // Igual que en 1.3: Supabase limita cuántas filas devuelve una sola
   // consulta, así que se trae todo en páginas con .range().
   let ventasCargadas = [];
@@ -458,11 +479,15 @@ function render() {
   }
   ventas = ventasCargadas;
 
-  const { data: presuFilas } = await sb.from('presupuesto_venta').select('*').eq('anio', hoy.getFullYear()).eq('mes', hoy.getMonth() + 1);
-  presupuestoPorSede = {};
+  // Se trae todo el historial de presupuesto_venta (es una tabla chica,
+  // una fila por sede/mes) para poder prorratear cualquier rango de
+  // fecha que se elija arriba, no solo el mes en curso.
+  const { data: presuFilas } = await sb.from('presupuesto_venta').select('*');
+  presupuestoTodo = {};
+  SEDES.forEach(s => presupuestoTodo[s] = {});
   (presuFilas || []).forEach(r => {
     if (!SEDES.includes(r.sede)) return;
-    presupuestoPorSede[r.sede] = { monto: Number(r.monto) || 0, punto_equilibrio: Number(r.punto_equilibrio) || 0 };
+    presupuestoTodo[r.sede][`${r.anio}-${r.mes}`] = { monto: Number(r.monto) || 0, punto_equilibrio: Number(r.punto_equilibrio) || 0 };
   });
 
   render();

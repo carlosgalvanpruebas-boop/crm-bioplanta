@@ -1,0 +1,367 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Agrotienda Bioplanta · Ventas por almacén</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+:root{--v1:#33513a;--v2:#4f7c5a;--v3:#84a38c;--v4:#a9c2af;--vbg:#eaefeb;--vlt:#f4f8f5;--texto:#1a2e1a;--beige:#e6ceab;--vino:#984745}
+body{font-family:'Segoe UI',system-ui,sans-serif;background:#f0f4f0;color:var(--texto);min-height:100vh}
+.header{background:linear-gradient(135deg,var(--v1),var(--v2));color:#fff;padding:16px 20px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;box-shadow:0 2px 12px rgba(0,0,0,.2)}
+.hdr-l{display:flex;align-items:center;gap:10px}
+.logo-ico{font-size:26px}
+.brand{font-size:15px;font-weight:800}
+.brand-sub{font-size:11px;opacity:.8}
+.hdr-r{display:flex;gap:8px;flex-wrap:wrap}
+.btn-h{background:rgba(255,255,255,.15);border:1px solid rgba(255,255,255,.3);color:#fff;padding:7px 16px;border-radius:20px;font-size:12px;cursor:pointer;font-family:inherit;text-decoration:none}
+
+.wrap{max-width:1100px;margin:0 auto;padding:18px 18px 60px}
+.loading{text-align:center;padding:80px;color:#888}
+.aviso{background:var(--beige);color:var(--v1);border-radius:10px;padding:12px 16px;font-size:12.5px;margin-bottom:16px;line-height:1.5}
+
+.filtros{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px;align-items:center}
+.filtro-chip{background:#fff;border:1.5px solid var(--v3);color:var(--v2);padding:6px 13px;border-radius:16px;font-size:11.5px;font-weight:700;cursor:pointer;font-family:inherit}
+.filtro-chip.act{background:var(--v2);color:#fff;border-color:var(--v2)}
+.filtro-grupo{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px}
+.filtro-label{font-size:11px;color:#888;font-weight:700;text-transform:uppercase;letter-spacing:.3px;width:100%;margin-top:6px}
+.rango-custom{display:flex;gap:8px;align-items:center;margin-bottom:14px;flex-wrap:wrap}
+.rango-custom input{border:1.5px solid #d6e2d9;border-radius:8px;padding:7px 10px;font-size:12.5px;font-family:inherit}
+.rango-custom span{font-size:12px;color:#888}
+
+.card{background:#fff;border-radius:16px;padding:20px;box-shadow:0 2px 10px rgba(0,0,0,.07);margin-bottom:18px}
+.card h3{font-size:13.5px;color:var(--v1);margin-bottom:4px}
+.card .sub{font-size:11.5px;color:#888;margin-bottom:14px}
+
+.sedes-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.sede-card{background:var(--vlt);border-radius:14px;padding:16px}
+.sede-card .sede-nom{font-size:13px;font-weight:800;color:var(--v1);margin-bottom:10px}
+.sede-card .sede-total{font-size:24px;font-weight:800;color:var(--v1);margin-bottom:2px}
+.sede-card .sede-sub{font-size:11px;color:#888;margin-bottom:12px}
+.sede-mini{display:flex;justify-content:space-between;font-size:12px;padding:5px 0;border-top:1px solid var(--vbg)}
+.sede-mini b{color:var(--v2)}
+.sede-mini.credito b{color:var(--vino)}
+
+.presu-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+.presu-item .presu-nom{font-size:12.5px;font-weight:700;color:var(--v1);margin-bottom:6px}
+.presu-barra{background:var(--vbg);border-radius:10px;height:14px;overflow:hidden;margin:8px 0}
+.presu-fill{background:var(--v2);height:100%;border-radius:10px 0 0 10px;transition:width .3s}
+.presu-fill.superado{background:var(--v1)}
+.presu-datos{display:flex;justify-content:space-between;font-size:11.5px;color:#666;flex-wrap:wrap;gap:4px}
+.presu-pct{font-size:22px;font-weight:800;color:var(--v1)}
+
+table{width:100%;border-collapse:collapse;font-size:12.5px}
+th,td{text-align:left;padding:9px 10px;border-bottom:1px solid var(--vbg)}
+th{color:var(--v2);font-size:10.5px;text-transform:uppercase;letter-spacing:.3px;background:var(--vlt)}
+tr:last-child td{border-bottom:none}
+td.num,th.num{text-align:right;white-space:nowrap}
+td.mes-actual{font-weight:800;color:var(--v1)}
+
+.vacio{text-align:center;padding:40px;color:#999;font-size:13px}
+
+@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
+:root{--vlt:#faf8f4;--gris:#f6f4f0;--texto:#25281f;--beige-lt:#f6ecdd;--vino-lt:#f3e8e7}
+html,body{font-family:'Plus Jakarta Sans',Inter,'Segoe UI',system-ui,sans-serif;-webkit-font-smoothing:antialiased;background:var(--vlt)}
+button,input,select,textarea{font-family:inherit}
+h1,h2,h3{font-weight:800;letter-spacing:-.015em;line-height:1.2;color:var(--v1)}
+body,p,td,th,li,label{line-height:1.5}
+.card,.sede-card{border-radius:14px;border:1px solid #e6e1d6;box-shadow:0 2px 10px rgba(37,40,31,.06)}
+.sede-card{box-shadow:none}
+button,.btn,.btn-h,input,select,textarea{border-radius:10px}
+
+@media (max-width:640px){
+  .wrap{padding:14px 12px 48px}
+  .header{padding:13px 14px}
+  .brand{font-size:14px}
+  .card{padding:16px 14px;overflow-x:auto}
+  .sedes-grid,.presu-grid{grid-template-columns:1fr}
+  table{font-size:11.5px}
+  th,td{padding:7px 7px}
+}
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div class="hdr-l">
+    <div class="logo-ico">📈</div>
+    <div>
+      <div class="brand">Ventas por almacén</div>
+      <div class="brand-sub">Comparativo Chigorodó vs Belén de Bajirá — solo lectura, Gerencia</div>
+    </div>
+  </div>
+  <div class="hdr-r" id="hdr-r">
+    <a class="btn-h" href="hub.html">← Hub</a>
+  </div>
+</div>
+
+<div class="wrap" id="wrap">
+  <div class="loading">Cargando...</div>
+</div>
+
+<script>
+const SUPABASE_URL = 'https://fpqogvxssnoarzgxcitc.supabase.co';
+const SUPABASE_KEY = 'sb_publishable_ccZF-8tenblFEah5lXfd3w_mYTHMtMC';
+const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+const SEDES = ['Chigorodó', 'Belén de Bajirá'];
+const RANGOS = [
+  { id: 'hoy', nombre: 'Hoy' },
+  { id: 'ayer', nombre: 'Ayer' },
+  { id: 'semana', nombre: 'Esta semana' },
+  { id: 'mes', nombre: 'Este mes' },
+  { id: 'elegir-mes', nombre: 'Elegir un mes' },
+  { id: 'custom', nombre: 'Rango personalizado' },
+];
+
+let ventas = [];
+let presupuestoPorSede = {}; // { 'Chigorodó': monto, 'Belén de Bajirá': monto } del mes en curso
+let filtroRango = 'mes';
+let customDesde = '';
+let customHasta = '';
+let mesElegido = `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}`;
+
+function fmtMoneda(n) {
+  return '$' + Math.round(n || 0).toLocaleString('es-CO');
+}
+function hoyISO() {
+  return new Date().toISOString().slice(0, 10);
+}
+function sumarDias(iso, dias) {
+  const d = new Date(iso + 'T00:00:00');
+  d.setDate(d.getDate() + dias);
+  return d.toISOString().slice(0, 10);
+}
+function inicioSemanaISO() {
+  const d = new Date();
+  const dia = (d.getDay() + 6) % 7; // lunes=0
+  d.setDate(d.getDate() - dia);
+  return d.toISOString().slice(0, 10);
+}
+function inicioMesISO() {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-01`;
+}
+
+function rangoFechas() {
+  const hoy = hoyISO();
+  if (filtroRango === 'hoy') return [hoy, hoy];
+  if (filtroRango === 'ayer') { const a = sumarDias(hoy, -1); return [a, a]; }
+  if (filtroRango === 'semana') return [inicioSemanaISO(), hoy];
+  if (filtroRango === 'mes') return [inicioMesISO(), hoy];
+  if (filtroRango === 'elegir-mes') {
+    const [anio, mes] = mesElegido.split('-').map(Number);
+    const desde = `${anio}-${String(mes).padStart(2, '0')}-01`;
+    const ultimoDia = new Date(anio, mes, 0).getDate();
+    const hasta = `${anio}-${String(mes).padStart(2, '0')}-${String(ultimoDia).padStart(2, '0')}`;
+    return [desde, hasta];
+  }
+  return [customDesde || hoy, customHasta || hoy];
+}
+
+function filtrarPorRango(filas, desde, hasta) {
+  return filas.filter(v => v.fecha && v.fecha >= desde && v.fecha <= hasta);
+}
+
+// Totales por sede: vendido / contado / crédito / # facturas, para un
+// conjunto de filas ya filtrado por fecha.
+function statsPorSede(filas) {
+  const r = {};
+  SEDES.forEach(s => r[s] = { total: 0, contado: 0, credito: 0, facturas: new Set() });
+  filas.forEach(v => {
+    if (!v.sede || !r[v.sede]) return; // ventas sin sede reconocida no entran en el comparativo
+    const valor = Number(v.valor) || 0;
+    r[v.sede].total += valor;
+    if (v.forma_pago === 'Contado') r[v.sede].contado += valor;
+    else if (v.forma_pago === 'Crédito') r[v.sede].credito += valor;
+    r[v.sede].facturas.add(v.factura);
+  });
+  return r;
+}
+
+function ultimosMeses(n) {
+  const meses = [];
+  const d = new Date();
+  d.setDate(1);
+  for (let i = 0; i < n; i++) {
+    meses.push({
+      anio: d.getFullYear(),
+      mes: d.getMonth() + 1,
+      etiqueta: d.toLocaleDateString('es-CO', { month: 'short', year: 'numeric' }),
+      esActual: i === 0,
+    });
+    d.setMonth(d.getMonth() - 1);
+  }
+  return meses.reverse();
+}
+
+function tablaMensual(todasVentas, meses) {
+  return meses.map(({ anio, mes, etiqueta, esActual }) => {
+    const desde = `${anio}-${String(mes).padStart(2, '0')}-01`;
+    const ultimoDia = new Date(anio, mes, 0).getDate();
+    const hasta = `${anio}-${String(mes).padStart(2, '0')}-${String(ultimoDia).padStart(2, '0')}`;
+    const porSede = statsPorSede(filtrarPorRango(todasVentas, desde, hasta));
+    const totalGeneral = SEDES.reduce((acc, s) => acc + porSede[s].total, 0);
+    return { etiqueta, porSede, totalGeneral, esActual };
+  });
+}
+
+function render() {
+  const [desde, hasta] = rangoFechas();
+  const filtradas = filtrarPorRango(ventas, desde, hasta);
+  const porSede = statsPorSede(filtradas);
+
+  // Cumplimiento de presupuesto por sede: siempre sobre el mes calendario
+  // en curso (igual que en 1.3), sin depender del filtro de arriba.
+  const inicioMes = inicioMesISO();
+  const hoy = hoyISO();
+  const diaDelMes = new Date().getDate();
+  const diasDelMes = new Date(new Date().getFullYear(), new Date().getMonth() + 1, 0).getDate();
+  const porSedeMes = statsPorSede(filtrarPorRango(ventas, inicioMes, hoy));
+
+  const meses = ultimosMeses(12);
+  const filas = tablaMensual(ventas, meses);
+
+  document.getElementById('wrap').innerHTML = `
+    <div class="aviso">
+      ℹ️ Solo lectura desde SAP. No reemplaza 2.3 (Registro de ventas, detalle transaccional) — este es el consolidado ejecutivo que compara ambas sedes. El presupuesto es la meta que Gerencia define en "Configurar presupuesto"; si una sede no tiene meta cargada para el mes, se indica en vez de mostrar un porcentaje.
+    </div>
+
+    <div class="filtro-grupo">
+      <span class="filtro-label">Rango de fecha</span>
+      ${RANGOS.map(r => `<button class="filtro-chip ${r.id === filtroRango ? 'act' : ''}" data-rango="${r.id}">${r.nombre}</button>`).join('')}
+    </div>
+    ${filtroRango === 'custom' ? `
+    <div class="rango-custom">
+      <input type="date" id="f-desde" value="${customDesde}"> <span>a</span> <input type="date" id="f-hasta" value="${customHasta}">
+    </div>` : ''}
+    ${filtroRango === 'elegir-mes' ? `
+    <div class="rango-custom">
+      <input type="month" id="f-mes" value="${mesElegido}">
+    </div>` : ''}
+
+    <div class="card">
+      <h3>🏬 Comparativo por sede</h3>
+      <div class="sub">Según el rango seleccionado arriba</div>
+      <div class="sedes-grid">
+        ${SEDES.map(sede => {
+          const s = porSede[sede];
+          return `
+          <div class="sede-card">
+            <div class="sede-nom">📍 ${sede}</div>
+            <div class="sede-total">${fmtMoneda(s.total)}</div>
+            <div class="sede-sub">${s.facturas.size} factura${s.facturas.size === 1 ? '' : 's'} · ticket prom. ${fmtMoneda(s.facturas.size ? s.total / s.facturas.size : 0)}</div>
+            <div class="sede-mini"><span>Contado</span><b>${fmtMoneda(s.contado)}</b></div>
+            <div class="sede-mini credito"><span>Crédito</span><b>${fmtMoneda(s.credito)}</b></div>
+          </div>`;
+        }).join('')}
+      </div>
+    </div>
+
+    <div class="card">
+      <h3>🎯 Cumplimiento de presupuesto por sede</h3>
+      <div class="sub">Mes en curso (día ${diaDelMes} de ${diasDelMes}) — no depende del rango de arriba</div>
+      <div class="presu-grid">
+        ${SEDES.map(sede => {
+          const meta = presupuestoPorSede[sede];
+          const vendidoMes = porSedeMes[sede].total;
+          const pct = meta ? Math.round((vendidoMes / meta) * 1000) / 10 : null;
+          return `
+          <div class="presu-item">
+            <div class="presu-nom">📍 ${sede}</div>
+            ${meta ? `
+              <div class="presu-pct">${pct}%</div>
+              <div class="presu-barra"><div class="presu-fill ${pct >= 100 ? 'superado' : ''}" style="width:${Math.min(pct, 100)}%"></div></div>
+              <div class="presu-datos">
+                <span>${fmtMoneda(vendidoMes)} de ${fmtMoneda(meta)}</span>
+              </div>
+            ` : `<div class="vacio" style="padding:16px 0">Sin presupuesto cargado para este mes.</div>`}
+          </div>`;
+        }).join('')}
+      </div>
+    </div>
+
+    <div class="card">
+      <h3>📆 Detalle mensual comparado</h3>
+      <div class="sub">Últimos 12 meses — total vendido por sede</div>
+      <table>
+        <thead><tr><th>Mes</th><th class="num">Chigorodó</th><th class="num">Belén de Bajirá</th><th class="num">Total</th></tr></thead>
+        <tbody>
+          ${filas.map(f => `
+            <tr>
+              <td class="${f.esActual ? 'mes-actual' : ''}">${f.etiqueta}${f.esActual ? ' (en curso)' : ''}</td>
+              <td class="num">${fmtMoneda(f.porSede['Chigorodó'].total)}</td>
+              <td class="num">${fmtMoneda(f.porSede['Belén de Bajirá'].total)}</td>
+              <td class="num"><b>${fmtMoneda(f.totalGeneral)}</b></td>
+            </tr>
+          `).join('')}
+        </tbody>
+      </table>
+    </div>
+  `;
+
+  document.querySelectorAll('[data-rango]').forEach(btn => {
+    btn.addEventListener('click', () => { filtroRango = btn.dataset.rango; render(); });
+  });
+  document.getElementById('f-desde')?.addEventListener('change', (e) => { customDesde = e.target.value; render(); });
+  document.getElementById('f-hasta')?.addEventListener('change', (e) => { customHasta = e.target.value; render(); });
+  document.getElementById('f-mes')?.addEventListener('change', (e) => { mesElegido = e.target.value; render(); });
+}
+
+(async () => {
+  const { data: { session } } = await sb.auth.getSession();
+  if (!session) { window.location.href = 'login.html'; return; }
+  const userId = session.user.id;
+  const [{ data: perfil }, { data: permisos }] = await Promise.all([
+    sb.from('perfiles').select('*').eq('id', userId).single(),
+    sb.from('permisos_modulo').select('*').eq('perfil_id', userId),
+  ]);
+  if (!perfil) {
+    document.getElementById('wrap').innerHTML = '<div class="loading">Tu usuario no tiene un perfil configurado todavía.</div>';
+    return;
+  }
+  const esSuperAdmin = perfil.es_super_admin;
+  const nivel3 = (permisos || []).find(p => p.modulo === 3)?.nivel || 'inactivo';
+  const puedeVer = esSuperAdmin || nivel3 !== 'inactivo';
+  if (!puedeVer) {
+    document.getElementById('wrap').innerHTML = '<div class="loading">No tienes permiso para ver este módulo.</div>';
+    return;
+  }
+  if (esSuperAdmin) {
+    document.getElementById('hdr-r').innerHTML = `
+      <a class="btn-h" href="configurar-presupuesto.html">🎯 Configurar presupuesto</a>
+      <a class="btn-h" href="hub.html">← Hub</a>
+    `;
+  }
+
+  const hoy = new Date();
+  // Igual que en 1.3: Supabase limita cuántas filas devuelve una sola
+  // consulta, así que se trae todo en páginas con .range().
+  let ventasCargadas = [];
+  let errVentas = null;
+  const PAGINA = 1000;
+  let desde = 0;
+  while (true) {
+    const { data, error } = await sb.from('ventas').select('factura,fecha,valor,sede,forma_pago').order('fecha', { ascending: false }).range(desde, desde + PAGINA - 1);
+    if (error) { errVentas = error; break; }
+    ventasCargadas = ventasCargadas.concat(data || []);
+    if (!data || data.length < PAGINA) break;
+    desde += PAGINA;
+  }
+  if (errVentas) {
+    document.getElementById('wrap').innerHTML = '<div class="loading">No se pudo cargar el histórico de ventas: ' + errVentas.message + '</div>';
+    return;
+  }
+  ventas = ventasCargadas;
+
+  const { data: presuFilas } = await sb.from('presupuesto_venta').select('*').eq('anio', hoy.getFullYear()).eq('mes', hoy.getMonth() + 1);
+  presupuestoPorSede = {};
+  (presuFilas || []).forEach(r => { if (SEDES.includes(r.sede)) presupuestoPorSede[r.sede] = Number(r.monto) || 0; });
+
+  render();
+})();
+</script>
+
+</body>
+</html>

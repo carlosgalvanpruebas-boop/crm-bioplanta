@@ -61,7 +61,7 @@ button,.btn,input{border-radius:10px}
     <div class="logo-ico">🎯</div>
     <div>
       <div class="brand">Configurar presupuesto</div>
-      <div class="brand-sub">Meta de venta mensual por sede — solo Gerencia</div>
+      <div class="brand-sub">Meta de venta y punto de equilibrio por sede — solo Gerencia</div>
     </div>
   </div>
   <a class="btn-h" href="gerencia-ventas.html">← Ventas por almacén</a>
@@ -79,7 +79,12 @@ const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 const SEDES = ['Chigorodó', 'Belén de Bajirá'];
 
 let mesElegido = `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}`;
-let valores = { 'Chigorodó': '', 'Belén de Bajirá': '' };
+function valoresVacios() {
+  const v = {};
+  SEDES.forEach(s => v[s] = { monto: '', punto_equilibrio: '' });
+  return v;
+}
+let valores = valoresVacios();
 let cargando = false;
 let mensaje = null; // { tipo: 'ok'|'err', texto }
 
@@ -92,16 +97,22 @@ async function cargarMes() {
   mensaje = null;
   const [anio, mes] = mesElegido.split('-').map(Number);
   const { data } = await sb.from('presupuesto_venta').select('*').eq('anio', anio).eq('mes', mes);
-  valores = { 'Chigorodó': '', 'Belén de Bajirá': '' };
+  valores = valoresVacios();
   (data || []).forEach(r => {
-    if (SEDES.includes(r.sede)) valores[r.sede] = String(Math.round(Number(r.monto) || 0));
+    if (!SEDES.includes(r.sede)) return;
+    valores[r.sede].monto = String(Math.round(Number(r.monto) || 0));
+    valores[r.sede].punto_equilibrio = r.punto_equilibrio ? String(Math.round(Number(r.punto_equilibrio))) : '';
   });
   render();
 }
 
 async function guardar() {
   const [anio, mes] = mesElegido.split('-').map(Number);
-  const metas = SEDES.map(sede => ({ sede, monto: Number(String(valores[sede]).replace(/[^0-9]/g, '')) || 0 }));
+  const metas = SEDES.map(sede => ({
+    sede,
+    monto: Number(String(valores[sede].monto).replace(/[^0-9]/g, '')) || 0,
+    punto_equilibrio: Number(String(valores[sede].punto_equilibrio).replace(/[^0-9]/g, '')) || 0,
+  }));
   if (metas.every(m => m.monto === 0)) {
     mensaje = { tipo: 'err', texto: 'Escribe al menos un monto mayor a cero.' };
     render();
@@ -130,7 +141,10 @@ async function guardar() {
 function render() {
   document.getElementById('wrap').innerHTML = `
     <div class="aviso">
-      ℹ️ Esta meta se usa en 1.3 (Resumen de venta, sumada entre las dos sedes) y en 3.1 (Ventas por almacén, cumplimiento por sede). No reemplaza ni edita ventas reales — solo define el objetivo del mes.
+      ℹ️ Aquí conviven dos metas distintas por sede, cada una con su propio uso:<br>
+      <b>Meta de venta total</b> (contado + crédito): se usa en 1.3 (Resumen de venta, sumada entre las dos sedes) y en 3.1 (cumplimiento de presupuesto por sede).<br>
+      <b>Punto de equilibrio</b> (solo ventas de contado — el crédito ya es utilidad de los dueños): se usa en 3.1 para el seguimiento semana a semana de cada sede. Es opcional; si lo dejas vacío, 3.1 simplemente no muestra esa comparación para el mes.<br>
+      Ninguna de las dos reemplaza ni edita ventas reales — solo definen el objetivo del mes.
     </div>
 
     <div class="card">
@@ -139,10 +153,16 @@ function render() {
       <input type="month" id="f-mes" value="${mesElegido}">
 
       ${SEDES.map(sede => `
-        <label for="f-${sede}">Meta ${sede}</label>
+        <label for="f-${sede}-monto">Meta de venta total ${sede}</label>
         <div class="campo-monto">
           <span>$</span>
-          <input type="text" inputmode="numeric" id="f-${sede}" value="${fmtMiles(valores[sede])}" placeholder="0">
+          <input type="text" inputmode="numeric" id="f-${sede}-monto" value="${fmtMiles(valores[sede].monto)}" placeholder="0">
+        </div>
+
+        <label for="f-${sede}-pe">Punto de equilibrio ${sede} (solo contado)</label>
+        <div class="campo-monto">
+          <span>$</span>
+          <input type="text" inputmode="numeric" id="f-${sede}-pe" value="${fmtMiles(valores[sede].punto_equilibrio)}" placeholder="0">
         </div>
       `).join('')}
 
@@ -153,9 +173,13 @@ function render() {
 
   document.getElementById('f-mes').addEventListener('change', (e) => { mesElegido = e.target.value; cargarMes(); });
   SEDES.forEach(sede => {
-    document.getElementById(`f-${sede}`).addEventListener('input', (e) => {
-      valores[sede] = e.target.value.replace(/[^0-9]/g, '');
-      e.target.value = fmtMiles(valores[sede]);
+    document.getElementById(`f-${sede}-monto`).addEventListener('input', (e) => {
+      valores[sede].monto = e.target.value.replace(/[^0-9]/g, '');
+      e.target.value = fmtMiles(valores[sede].monto);
+    });
+    document.getElementById(`f-${sede}-pe`).addEventListener('input', (e) => {
+      valores[sede].punto_equilibrio = e.target.value.replace(/[^0-9]/g, '');
+      e.target.value = fmtMiles(valores[sede].punto_equilibrio);
     });
   });
   document.getElementById('btn-guardar').addEventListener('click', guardar);

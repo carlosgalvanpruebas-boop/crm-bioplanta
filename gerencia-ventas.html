@@ -128,8 +128,12 @@ let mesElegido = `${new Date().getFullYear()}-${String(new Date().getMonth() + 1
 function fmtMoneda(n) {
   return '$' + Math.round(n || 0).toLocaleString('es-CO');
 }
+// Ver nota en resumen-venta.html: usar toISOString() aquí daba la fecha en
+// UTC, no en horario Colombia — entre 7pm y medianoche local eso ya es
+// "mañana" en UTC, rompiendo "Hoy"/"Ayer"/"Esta semana". Corregido 16-sep-2026.
 function hoyISO() {
-  return new Date().toISOString().slice(0, 10);
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
 function sumarDias(iso, dias) {
   const d = new Date(iso + 'T00:00:00');
@@ -140,7 +144,7 @@ function inicioSemanaISO() {
   const d = new Date();
   const dia = (d.getDay() + 6) % 7; // lunes=0
   d.setDate(d.getDate() - dia);
-  return d.toISOString().slice(0, 10);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
 function inicioMesISO() {
   const d = new Date();

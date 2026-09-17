@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Agrotienda Bioplanta · Cartera clientes</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+:root{--v1:#33513a;--v2:#4f7c5a;--vbg:#eaefeb;--vino:#984745}
+body{font-family:'Segoe UI',system-ui,sans-serif;background:#f0f4f0;color:#1a2e1a;min-height:100vh}
+.header{background:linear-gradient(135deg,var(--v1),var(--v2));color:#fff;padding:12px 20px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;box-shadow:0 2px 12px rgba(0,0,0,.2)}
+.hdr-l{display:flex;align-items:center;gap:10px;font-size:13px}
+.hdr-l b{font-weight:800}
+.hdr-sub{font-size:11px;opacity:.85}
+.btn-h{background:rgba(255,255,255,.15);border:1px solid rgba(255,255,255,.3);color:#fff;padding:7px 16px;border-radius:20px;font-size:12px;cursor:pointer;font-family:inherit;text-decoration:none;white-space:nowrap}
+.loading{text-align:center;padding:80px;color:#888;font-family:'Segoe UI',system-ui,sans-serif}
+.vacio{max-width:640px;margin:60px auto;text-align:center;padding:40px 24px;color:#666;font-family:'Segoe UI',system-ui,sans-serif}
+.vacio h2{color:var(--v1);margin-bottom:10px}
+iframe{border:none;width:100%;display:block}
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div class="hdr-l">
+    <span>💳</span>
+    <div>
+      <div><b>Cartera clientes</b></div>
+      <div class="hdr-sub" id="hdr-actualizado">Cargando...</div>
+    </div>
+  </div>
+  <a class="btn-h" href="hub.html">← Hub</a>
+</div>
+
+<div id="wrap">
+  <div class="loading">Cargando informe de cartera...</div>
+</div>
+
+<script>
+const SUPABASE_URL = 'https://fpqogvxssnoarzgxcitc.supabase.co';
+const SUPABASE_KEY = 'sb_publishable_ccZF-8tenblFEah5lXfd3w_mYTHMtMC';
+const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+function fmtFechaHora(iso) {
+  if (!iso) return '';
+  return new Date(iso).toLocaleString('es-CO', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+}
+
+(async () => {
+  const { data: { session } } = await sb.auth.getSession();
+  if (!session) { window.location.href = 'login.html'; return; }
+
+  const [{ data: perfil }, { data: permisos }] = await Promise.all([
+    sb.from('perfiles').select('*').eq('id', session.user.id).single(),
+    sb.from('permisos_modulo').select('*').eq('perfil_id', session.user.id),
+  ]);
+  if (!perfil) {
+    document.getElementById('wrap').innerHTML = '<div class="loading">Tu usuario no tiene un perfil configurado todavía.</div>';
+    return;
+  }
+
+  const esSuperAdmin = perfil.es_super_admin;
+  const nivel1 = (permisos || []).find(p => p.modulo === 1)?.nivel || 'inactivo';
+  const nivel2 = (permisos || []).find(p => p.modulo === 2)?.nivel || 'inactivo';
+  const autorizado = esSuperAdmin || nivel1 !== 'inactivo' || nivel2 !== 'inactivo';
+  if (!autorizado) {
+    document.getElementById('wrap').innerHTML = '<div class="loading">No tienes permiso para ver este módulo.</div>';
+    return;
+  }
+
+  const { data, error } = await sb.from('cartera_informe').select('html, actualizado_en, actualizado_por').eq('id', 1).maybeSingle();
+
+  if (error) {
+    document.getElementById('wrap').innerHTML = `<div class="loading">No se pudo cargar el informe: ${error.message}</div>`;
+    return;
+  }
+
+  if (!data || !data.html) {
+    document.getElementById('wrap').innerHTML = `
+      <div class="vacio">
+        <h2>Todavía no hay un informe cargado</h2>
+        <p>Sube el reporte HTML del jefe contable desde <a href="cargar-cartera-informe.html">Cargar información → Cartera de clientes</a>.</p>
+      </div>
+    `;
+    document.getElementById('hdr-actualizado').textContent = 'Sin informe';
+    return;
+  }
+
+  document.getElementById('hdr-actualizado').textContent =
+    `Actualizado ${fmtFechaHora(data.actualizado_en)}${data.actualizado_por ? ' · ' + data.actualizado_por : ''}`;
+
+  const iframe = document.createElement('iframe');
+  iframe.setAttribute('sandbox', 'allow-scripts allow-same-origin');
+  iframe.style.height = (window.innerHeight - 54) + 'px';
+  document.getElementById('wrap').innerHTML = '';
+  document.getElementById('wrap').appendChild(iframe);
+  iframe.srcdoc = data.html;
+
+  window.addEventListener('resize', () => { iframe.style.height = (window.innerHeight - 54) + 'px'; });
+})();
+</script>
+
+</body>
+</html>

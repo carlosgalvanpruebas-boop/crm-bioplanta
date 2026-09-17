@@ -57,6 +57,7 @@ th{color:var(--v2);font-size:10.5px;text-transform:uppercase;letter-spacing:.3px
 tr:last-child td{border-bottom:none}
 td.num,th.num{text-align:right;white-space:nowrap}
 td.mes-actual{font-weight:800;color:var(--v1)}
+tfoot td{border-top:2px solid var(--v3);border-bottom:none;background:var(--vlt);font-weight:800;color:var(--v1)}
 
 .vacio{text-align:center;padding:40px;color:#999;font-size:13px}
 
@@ -187,20 +188,23 @@ function statsPorSede(filas) {
   return r;
 }
 
-function ultimosMeses(n) {
+// Meses del año en curso, de enero al mes actual (año a la fecha) — antes
+// mostraba "últimos 12 meses" en ventana móvil, lo que podía mezclar dos
+// años calendario distintos; ahora siempre arranca en enero (Carlos, 16-sep-2026).
+function mesesDelAnio() {
+  const hoy = new Date();
+  const anio = hoy.getFullYear();
+  const mesActual = hoy.getMonth() + 1;
   const meses = [];
-  const d = new Date();
-  d.setDate(1);
-  for (let i = 0; i < n; i++) {
+  for (let mes = 1; mes <= mesActual; mes++) {
     meses.push({
-      anio: d.getFullYear(),
-      mes: d.getMonth() + 1,
-      etiqueta: d.toLocaleDateString('es-CO', { month: 'short', year: 'numeric' }),
-      esActual: i === 0,
+      anio,
+      mes,
+      etiqueta: new Date(anio, mes - 1, 1).toLocaleDateString('es-CO', { month: 'short', year: 'numeric' }),
+      esActual: mes === mesActual,
     });
-    d.setMonth(d.getMonth() - 1);
   }
-  return meses.reverse();
+  return meses;
 }
 
 function tablaMensual(todasVentas, meses) {
@@ -210,7 +214,10 @@ function tablaMensual(todasVentas, meses) {
     const hasta = `${anio}-${String(mes).padStart(2, '0')}-${String(ultimoDia).padStart(2, '0')}`;
     const porSede = statsPorSede(filtrarPorRango(todasVentas, desde, hasta));
     const totalGeneral = SEDES.reduce((acc, s) => acc + porSede[s].total, 0);
-    return { etiqueta, porSede, totalGeneral, esActual };
+    // Meta combinada del mes (suma de la meta de las 2 sedes, si existe).
+    const meta = SEDES.reduce((acc, s) => acc + (presupuestoTodo[s]?.[`${anio}-${mes}`]?.monto || 0), 0);
+    const pctCumplimiento = meta ? Math.round((totalGeneral / meta) * 1000) / 10 : null;
+    return { etiqueta, porSede, totalGeneral, esActual, meta, pctCumplimiento };
   });
 }
 
@@ -279,12 +286,17 @@ function fmtFechaCorta(iso) {
 // Cada semana trae su propia meta (semanas parciales en los bordes del
 // rango — o a caballo entre dos meses — no pesan igual que una semana
 // completa), marcada con una muesca punteada sobre su barra.
+// El texto "Meta X M" se coloca a la DERECHA de la línea punteada (no
+// centrado sobre la barra) para que nunca se encime con el valor real
+// que va arriba de la barra — antes ambos textos competían por el mismo
+// espacio vertical y quedaban ilegibles cuando el valor y la meta eran
+// cercanos (reportado por Carlos, 16-sep-2026).
 // semanas: [{ semana, contado, meta }]
 function svgSemanal(semanas) {
-  const anchoBarra = 46, espacio = 14, alto = 130, margenIzq = 4, margenSup = 10;
+  const anchoBarra = 46, espacio = 30, alto = 140, margenIzq = 4, margenSup = 16, margenDer = 74;
   const maxValor = Math.max(...semanas.map(s => Math.max(s.contado, s.meta)), 1) * 1.15;
   const escala = (alto - margenSup) / maxValor;
-  const anchoTotal = semanas.length * (anchoBarra + espacio) + margenIzq;
+  const anchoTotal = semanas.length * (anchoBarra + espacio) - espacio + margenIzq + margenDer;
 
   const barras = semanas.map((s, i) => {
     const x = margenIzq + i * (anchoBarra + espacio);
@@ -292,23 +304,17 @@ function svgSemanal(semanas) {
     const y = alto - h;
     const yMeta = alto - s.meta * escala;
     const alcanzo = s.contado >= s.meta;
-    // El número de la meta va pegado a la línea punteada: adentro de la
-    // barra (en blanco) si la barra ya la superó, o justo encima (en
-    // verde oscuro) si todavía no llega — así no se monta con el número
-    // del valor real que va arriba de la barra.
-    const yTextoMeta = alcanzo ? yMeta + 11 : yMeta - 4;
-    const colorTextoMeta = alcanzo ? '#fff' : '#33513a';
     return `
-      <text x="${x + anchoBarra / 2}" y="${y - 6}" text-anchor="middle" font-size="10.5" font-weight="700" fill="${alcanzo ? '#256d3b' : '#984745'}">${(s.contado / 1000000).toFixed(1)}M</text>
+      <text x="${x + anchoBarra / 2}" y="${y - 8}" text-anchor="middle" font-size="10.5" font-weight="700" fill="${alcanzo ? '#256d3b' : '#984745'}">${(s.contado / 1000000).toFixed(1)}M</text>
       <rect x="${x}" y="${y}" width="${anchoBarra}" height="${h}" rx="4" fill="${alcanzo ? '#4f7c5a' : '#c97b78'}"></rect>
-      <line x1="${x - 3}" y1="${yMeta}" x2="${x + anchoBarra + 3}" y2="${yMeta}" stroke="#33513a" stroke-width="1.5" stroke-dasharray="4,3"></line>
-      <text x="${x + anchoBarra / 2}" y="${yTextoMeta}" text-anchor="middle" font-size="9" font-weight="700" fill="${colorTextoMeta}">Meta ${(s.meta / 1000000).toFixed(1)}M</text>
-      <text x="${x + anchoBarra / 2}" y="${alto + 16}" text-anchor="middle" font-size="10.5" fill="#888">Sem. ${s.semana}</text>
+      <line x1="${x - 3}" y1="${yMeta}" x2="${x + anchoBarra + 8}" y2="${yMeta}" stroke="#33513a" stroke-width="1.5" stroke-dasharray="4,3"></line>
+      <text x="${x + anchoBarra + 11}" y="${yMeta + 3}" text-anchor="start" font-size="9" font-weight="700" fill="#33513a">Meta ${(s.meta / 1000000).toFixed(1)}M</text>
+      <text x="${x + anchoBarra / 2}" y="${alto + 18}" text-anchor="middle" font-size="10.5" fill="#888">Sem. ${s.semana}</text>
     `;
   }).join('');
 
   return `
-    <svg width="${anchoTotal}" height="${alto + 28}" viewBox="0 0 ${anchoTotal} ${alto + 28}" style="max-width:100%">
+    <svg width="${anchoTotal}" height="${alto + 30}" viewBox="0 0 ${anchoTotal} ${alto + 30}" style="max-width:100%">
       ${barras}
     </svg>
   `;
@@ -320,8 +326,20 @@ function render() {
   const porSede = statsPorSede(filtradas);
   const etiquetaRango = desde === hasta ? fmtFechaCorta(desde) : `${fmtFechaCorta(desde)} → ${fmtFechaCorta(hasta)}`;
 
-  const meses = ultimosMeses(12);
+  // Total combinado de las 2 sedes para el rango elegido (punto 1).
+  const totalCombinado = SEDES.reduce((acc, s) => acc + porSede[s].total, 0);
+  const contadoCombinado = SEDES.reduce((acc, s) => acc + porSede[s].contado, 0);
+  const creditoCombinado = SEDES.reduce((acc, s) => acc + porSede[s].credito, 0);
+  const facturasCombinado = SEDES.reduce((acc, s) => acc + porSede[s].facturas.size, 0);
+
+  const meses = mesesDelAnio();
   const filas = tablaMensual(ventas, meses);
+  // Totales del año a la fecha, para la fila final de la tabla (punto 5).
+  const totalAnioChigorodo = filas.reduce((acc, f) => acc + f.porSede['Chigorodó'].total, 0);
+  const totalAnioBajira = filas.reduce((acc, f) => acc + f.porSede['Belén de Bajirá'].total, 0);
+  const totalAnioGeneral = totalAnioChigorodo + totalAnioBajira;
+  const totalAnioMeta = filas.reduce((acc, f) => acc + f.meta, 0);
+  const pctAnio = totalAnioMeta ? Math.round((totalAnioGeneral / totalAnioMeta) * 1000) / 10 : null;
 
   document.getElementById('wrap').innerHTML = `
     <div class="aviso">
@@ -340,6 +358,13 @@ function render() {
     <div class="rango-custom">
       <input type="month" id="f-mes" value="${mesElegido}">
     </div>` : ''}
+
+    <div class="card">
+      <h3>💰 Total vendido (ambas sedes)</h3>
+      <div class="sub">${etiquetaRango}</div>
+      <div style="font-size:34px;font-weight:800;color:var(--v1);margin-bottom:6px">${fmtMoneda(totalCombinado)}</div>
+      <div style="font-size:12px;color:#777">${facturasCombinado} factura${facturasCombinado === 1 ? '' : 's'} · Contado ${fmtMoneda(contadoCombinado)} · Crédito ${fmtMoneda(creditoCombinado)}</div>
+    </div>
 
     <div class="card">
       <h3>🏬 Comparativo por sede</h3>
@@ -390,14 +415,11 @@ function render() {
 
     <div class="card">
       <h3>📉 Punto de equilibrio — solo ventas de contado</h3>
-      <div class="sub">${etiquetaRango}. El punto de equilibrio mensual se prorratea por día (ej.: meta de $100 millones ÷ 30 días del mes = $3,3 millones diarios) y se suma a los días del rango elegido arriba. El crédito no cuenta aquí — se considera utilidad de los dueños.</div>
+      <div class="sub">${etiquetaRango}. Barra = venta real de contado por semana; línea punteada = punto de equilibrio de esa semana.</div>
       <div class="presu-grid">
         ${SEDES.map(sede => {
-          const { total: metaRango, porSemana: metaPorSemana, faltan } = prorratearPorDia(sede, desde, hasta, 'punto_equilibrio');
+          const { total: metaRango, porSemana: metaPorSemana } = prorratearPorDia(sede, desde, hasta, 'punto_equilibrio');
           if (!metaRango) return `<div class="presu-item"><div class="presu-nom">📍 ${sede}</div><div class="vacio" style="padding:16px 0">Sin punto de equilibrio cargado para este rango.</div></div>`;
-
-          const vendidoRango = porSede[sede].contado;
-          const pct = Math.round((vendidoRango / metaRango) * 1000) / 10;
 
           const actualPorSemana = {};
           filtradas.forEach(v => {
@@ -412,14 +434,9 @@ function render() {
           return `
           <div class="presu-item">
             <div class="presu-nom">📍 ${sede}</div>
-            <div class="presu-pct">${pct}%</div>
-            <div class="presu-barra"><div class="presu-fill ${pct >= 100 ? 'superado' : ''}" style="width:${Math.min(pct, 100)}%"></div></div>
-            <div class="presu-datos">
-              <span>${fmtMoneda(vendidoRango)} de ${fmtMoneda(metaRango)} (punto de equilibrio del rango)${faltan ? ' · faltan meses con punto de equilibrio en este rango' : ''}</span>
-            </div>
             ${demasiadasSemanas
-              ? `<div class="vacio" style="padding:16px 0">El rango elegido tiene ${semanas.length} semanas — elige un rango más corto (por ejemplo, un mes) para ver el detalle semana a semana.</div>`
-              : (semanas.length > 1 ? `<div style="margin-top:14px">${svgSemanal(semanas)}</div>` : '')}
+              ? `<div class="vacio" style="padding:16px 0">El rango elegido tiene ${semanas.length} semanas — elige un rango más corto (por ejemplo, un mes) para ver el gráfico semanal.</div>`
+              : (semanas.length > 1 ? svgSemanal(semanas) : `<div class="vacio" style="padding:16px 0">El rango elegido no cubre ninguna semana completa todavía.</div>`)}
           </div>`;
         }).join('')}
       </div>
@@ -427,9 +444,9 @@ function render() {
 
     <div class="card">
       <h3>📆 Detalle mensual comparado</h3>
-      <div class="sub">Últimos 12 meses — total vendido por sede</div>
+      <div class="sub">Año en curso, de enero al mes actual — total vendido, meta y % de cumplimiento por mes</div>
       <table>
-        <thead><tr><th>Mes</th><th class="num">Chigorodó</th><th class="num">Belén de Bajirá</th><th class="num">Total</th></tr></thead>
+        <thead><tr><th>Mes</th><th class="num">Chigorodó</th><th class="num">Belén de Bajirá</th><th class="num">Total</th><th class="num">Meta</th><th class="num">% Cumplimiento</th></tr></thead>
         <tbody>
           ${filas.map(f => `
             <tr>
@@ -437,9 +454,21 @@ function render() {
               <td class="num">${fmtMoneda(f.porSede['Chigorodó'].total)}</td>
               <td class="num">${fmtMoneda(f.porSede['Belén de Bajirá'].total)}</td>
               <td class="num"><b>${fmtMoneda(f.totalGeneral)}</b></td>
+              <td class="num">${f.meta ? fmtMoneda(f.meta) : '—'}</td>
+              <td class="num">${f.pctCumplimiento == null ? '—' : `${f.pctCumplimiento}%`}</td>
             </tr>
           `).join('')}
         </tbody>
+        <tfoot>
+          <tr>
+            <td><b>Total año</b></td>
+            <td class="num"><b>${fmtMoneda(totalAnioChigorodo)}</b></td>
+            <td class="num"><b>${fmtMoneda(totalAnioBajira)}</b></td>
+            <td class="num"><b>${fmtMoneda(totalAnioGeneral)}</b></td>
+            <td class="num"><b>${totalAnioMeta ? fmtMoneda(totalAnioMeta) : '—'}</b></td>
+            <td class="num"><b>${pctAnio == null ? '—' : `${pctAnio}%`}</b></td>
+          </tr>
+        </tfoot>
       </table>
     </div>
   `;

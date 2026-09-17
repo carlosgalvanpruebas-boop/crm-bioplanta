@@ -107,6 +107,18 @@ const SUPABASE_KEY = 'sb_publishable_ccZF-8tenblFEah5lXfd3w_mYTHMtMC';
 const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
 const SEDES = ['Chigorodó', 'Belén de Bajirá'];
+// Meta general de ventas por mes para 2026 — venta TOTAL de la agrotienda
+// (contado + crédito, ambas sedes juntas), dada directamente por Carlos
+// (16-sep-2026) para la tabla "Cumplimiento de presupuesto". Es distinta
+// de la meta por sede/solo-contado que usan las secciones de arriba
+// ("Cumplimiento de presupuesto por sede" y "Punto de equilibrio") — esas
+// siguen usando `presupuesto_venta` tal cual. Si el año cambia o Carlos
+// actualiza estos montos, hay que editar este objeto.
+const METAS_2026 = {
+  1: 400000000, 2: 550000000, 3: 550000000, 4: 800000000,
+  5: 750000000, 6: 500000000, 7: 550000000, 8: 850000000,
+  9: 850000000, 10: 900000000, 11: 850000000, 12: 850000000,
+};
 const RANGOS = [
   { id: 'hoy', nombre: 'Hoy' },
   { id: 'ayer', nombre: 'Ayer' },
@@ -213,9 +225,10 @@ function tablaMensual(todasVentas, meses) {
     const ultimoDia = new Date(anio, mes, 0).getDate();
     const hasta = `${anio}-${String(mes).padStart(2, '0')}-${String(ultimoDia).padStart(2, '0')}`;
     const porSede = statsPorSede(filtrarPorRango(todasVentas, desde, hasta));
+    // Venta TOTAL del mes (contado + crédito, ambas sedes) — no solo contado.
     const totalGeneral = SEDES.reduce((acc, s) => acc + porSede[s].total, 0);
-    // Meta combinada del mes (suma de la meta de las 2 sedes, si existe).
-    const meta = SEDES.reduce((acc, s) => acc + (presupuestoTodo[s]?.[`${anio}-${mes}`]?.monto || 0), 0);
+    // Meta general del mes (no por sede, no solo contado) — ver METAS_2026.
+    const meta = METAS_2026[mes] || 0;
     const pctCumplimiento = meta ? Math.round((totalGeneral / meta) * 1000) / 10 : null;
     return { etiqueta, porSede, totalGeneral, esActual, meta, pctCumplimiento };
   });
@@ -443,8 +456,8 @@ function render() {
     </div>
 
     <div class="card">
-      <h3>📆 Detalle mensual comparado</h3>
-      <div class="sub">Año en curso, de enero al mes actual — total vendido, meta y % de cumplimiento por mes</div>
+      <h3>🎯 Cumplimiento de presupuesto</h3>
+      <div class="sub">Año en curso, de enero al mes actual — venta total (contado + crédito, ambas sedes) vs. meta general del mes</div>
       <table>
         <thead><tr><th>Mes</th><th class="num">Chigorodó</th><th class="num">Belén de Bajirá</th><th class="num">Total</th><th class="num">Meta</th><th class="num">% Cumplimiento</th></tr></thead>
         <tbody>

@@ -28,6 +28,7 @@
 // descartaba ventas reales etiquetadas con otros valores de OcrCode3
 // (C10, C11, C19...) — se revirtió a este filtro por sede.
 // ============================================================
+// (retrigger deploy 18-sep-2026)
 
 const { createClient } = require('@supabase/supabase-js');
 

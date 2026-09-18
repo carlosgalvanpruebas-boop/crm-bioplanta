@@ -244,35 +244,57 @@ function bind() {
   document.getElementById('btn-confirmar')?.addEventListener('click', async () => {
     const btn = document.getElementById('btn-confirmar');
     btn.disabled = true;
-    btn.textContent = 'Cargando...';
-    try {
-      const resp = await fetch('/api/cargar-ventas', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${sesionActual.access_token}`,
-        },
-        body: JSON.stringify({ ventas: filas }),
-      });
-      const data = await resp.json();
-      if (!resp.ok) {
-        mensajeResultado = `<div class="msg err">❌ ${data.error || 'No se pudo cargar'}</div>`;
-      } else {
-        mensajeResultado = `
-          <div class="resumen">
-            <span class="chip-r nuevo">${data.procesadas} procesadas</span>
-            ${data.omitidosPorOcrCode3 ? `<span class="chip-r elim">${data.omitidosPorOcrCode3} omitidas (OcrCode3 distinto de C30/C31)</span>` : ''}
-            ${data.omitidosPorCancelado ? `<span class="chip-r elim">${data.omitidosPorCancelado} omitidas (canceladas)</span>` : ''}
-            ${data.omitidosPorGrupo ? `<span class="chip-r elim">${data.omitidosPorGrupo} omitidas (grupos excluidos)</span>` : ''}
-            ${data.duplicadosColapsados ? `<span class="chip-r">${data.duplicadosColapsados} duplicadas en el archivo</span>` : ''}
-            ${data.sinFacturaOProducto ? `<span class="chip-r elim">${data.sinFacturaOProducto} sin factura/producto</span>` : ''}
-          </div>
-          <div class="msg ok">✅ Ventas cargadas correctamente.</div>
-        `;
-        filas = [];
+
+    // Fase (sep-2026): el archivo completo del año puede traer miles de
+    // filas — se sube en lotes para no chocar con el límite de tamaño/
+    // tiempo de una función serverless de Vercel en una sola petición.
+    const TAM_LOTE = 500;
+    const lotes = [];
+    for (let i = 0; i < filas.length; i += TAM_LOTE) lotes.push(filas.slice(i, i + TAM_LOTE));
+
+    const totales = { procesadas: 0, omitidosPorOcrCode3: 0, omitidosPorCancelado: 0, omitidosPorGrupo: 0, duplicadosColapsados: 0, sinFacturaOProducto: 0 };
+    let errorMsg = null;
+
+    for (let i = 0; i < lotes.length; i++) {
+      btn.textContent = lotes.length > 1 ? `Cargando lote ${i + 1} de ${lotes.length}...` : 'Cargando...';
+      try {
+        const resp = await fetch('/api/cargar-ventas', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${sesionActual.access_token}`,
+          },
+          body: JSON.stringify({ ventas: lotes[i] }),
+        });
+        const data = await resp.json();
+        if (!resp.ok) { errorMsg = data.error || 'No se pudo cargar'; break; }
+        totales.procesadas += data.procesadas || 0;
+        totales.omitidosPorOcrCode3 += data.omitidosPorOcrCode3 || 0;
+        totales.omitidosPorCancelado += data.omitidosPorCancelado || 0;
+        totales.omitidosPorGrupo += data.omitidosPorGrupo || 0;
+        totales.duplicadosColapsados += data.duplicadosColapsados || 0;
+        totales.sinFacturaOProducto += data.sinFacturaOProducto || 0;
+      } catch (e) {
+        errorMsg = 'Error de red: ' + e.message;
+        break;
       }
-    } catch (e) {
-      mensajeResultado = `<div class="msg err">❌ Error de red: ${e.message}</div>`;
+    }
+
+    if (errorMsg) {
+      mensajeResultado = `<div class="msg err">❌ ${errorMsg} (se alcanzaron a procesar ${totales.procesadas} líneas antes del error — puedes volver a subir el mismo archivo, las líneas ya cargadas se actualizan sin duplicarse)</div>`;
+    } else {
+      mensajeResultado = `
+        <div class="resumen">
+          <span class="chip-r nuevo">${totales.procesadas} procesadas</span>
+          ${totales.omitidosPorOcrCode3 ? `<span class="chip-r elim">${totales.omitidosPorOcrCode3} omitidas (OcrCode3 distinto de C30/C31)</span>` : ''}
+          ${totales.omitidosPorCancelado ? `<span class="chip-r elim">${totales.omitidosPorCancelado} omitidas (canceladas)</span>` : ''}
+          ${totales.omitidosPorGrupo ? `<span class="chip-r elim">${totales.omitidosPorGrupo} omitidas (grupos excluidos)</span>` : ''}
+          ${totales.duplicadosColapsados ? `<span class="chip-r">${totales.duplicadosColapsados} duplicadas en el archivo</span>` : ''}
+          ${totales.sinFacturaOProducto ? `<span class="chip-r elim">${totales.sinFacturaOProducto} sin factura/producto</span>` : ''}
+        </div>
+        <div class="msg ok">✅ Ventas cargadas correctamente${lotes.length > 1 ? ` (en ${lotes.length} lotes)` : ''}.</div>
+      `;
+      filas = [];
     }
     render();
     cargarHistorial();

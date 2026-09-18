@@ -155,6 +155,13 @@ module.exports = async (req, res) => {
     // cargador de inventario) — se filtran también aquí.
     const { data: excluidosRows } = await sbAdmin.from('sap_prefijos_excluidos').select('prefijo');
     const prefijosExcluidos = new Set((excluidosRows || []).map(r => (r.prefijo || '').toUpperCase()));
+    // NOLI queda excluido del catálogo de INVENTARIO (no es artículo propio
+    // de Agrotienda), pero sí se vende ocasionalmente de mostrador — Carlos
+    // confirmó (sep-2026, reconciliación contra Power BI) que esas ventas
+    // puntuales sí cuentan como venta real de la agrotienda. Se quita solo
+    // de esta copia en memoria — no se toca la tabla `sap_prefijos_excluidos`,
+    // que sigue rigiendo tal cual para la carga de inventario.
+    prefijosExcluidos.delete('NOLI');
 
     let omitidosPorGrupo = 0;
     let omitidosSinCodigo = 0;

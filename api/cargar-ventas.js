@@ -13,56 +13,78 @@
 // se solape en fechas) se sube dos veces, no queden líneas
 // duplicadas — simplemente se actualiza la línea ya existente.
 //
-// También filtra automáticamente cualquier línea cuyo código SAP
-// pertenezca a un grupo ya marcado como "no es de Agrotienda" en
-// `sap_prefijos_excluidos` (la misma lista que se usa en la carga
-// de inventario), para no ensuciar el histórico de ventas con
-// ventas de otro negocio que comparte el mismo SAP.
+// ⚠️ IMPORTANTE (19-sep-2026): esta tabla es aditiva y nunca borra
+// filas viejas al recibir un archivo nuevo. Si una fila entra alguna
+// vez por un filtro más permisivo que el de hoy, se queda ahí para
+// siempre hasta que alguien la borre a mano en Supabase — arreglar
+// el filtro aquí NO limpia lo que ya quedó mal cargado antes. Ya
+// pasó una vez (agosto-2026, ver claude/fix-carga-inventario-sede-15-sep.md
+// y la limpieza puntual que se corrió el 18-sep-2026): si vuelve a
+// aparecer un total que no cuadra contra Power BI aunque el filtro de
+// abajo esté bien, sospechar primero de filas viejas contaminando el
+// histórico, no del código.
 //
-// Regla de sede: solo se cargan filas cuyo centro de costo real de SAP
-// (OcrCode) mapee a una de las dos sedes de la agrotienda (Chigorodó o
-// Belén de Bajirá, vía sedeDeCentroCosto() en cargar-ventas.html) — esa
-// es la regla validada contra el informe de Power BI (reconciliación
-// exacta de julio, sep-2026). Se probó un filtro más estricto por
-// OcrCode3 (C30/C31) entre el 16 y 18-sep-2026, pero se detectó que
-// descartaba ventas reales etiquetadas con otros valores de OcrCode3
-// (C10, C11, C19...) — se revirtió a este filtro por sede.
 // ============================================================
-// (retrigger deploy 18-sep-2026)
+// REGLA DE INCLUSIÓN — validada AL PESO contra el informe de Power BI
+// (reconciliación completa de los 9 meses corridos de 2026, 19-sep-2026):
+//
+//   1) Cuenta contable (AcctCode) empieza por "4135" (venta) o "4175"
+//      (nota crédito — su "Ingreso Total" ya viene negativo en el
+//      export de SAP, así que sumarla resta sola; no se invierte el
+//      signo). Cualquier otra cuenta contable se excluye.
+//   2) Cancelado = "N" exactamente. Cualquier otro valor (incluidos
+//      "Y", "C", o la casilla vacía) se excluye — SAP usa "Y"/"C" para
+//      marcar una factura anulada y su reemplazo, ambas inválidas.
+//   3) El centro de costo (OcrCode) debe reconocer una de las 2 sedes
+//      de la agrotienda: CHIGOROD o CAREPA (nombre viejo de la sede de
+//      Chigorodó, antes del traslado) -> Chigorodó; BAJIRA/BAJIRÁ ->
+//      Belén de Bajirá. Cualquier otro centro de costo (de otra línea
+//      de negocio que comparte el mismo SAP) se excluye.
+//   4) Se excluyen SOLO los artículos cuyo código empiece por "SEM"
+//      (semilla de palma aceitera — es del vivero de la extractora, no
+//      de la agrotienda). Ningún otro prefijo se excluye aquí: NOLI
+//      (aceite/infusionados) y AGROLAB sí se venden de mostrador y sí
+//      cuentan como venta real de Agrotienda — confirmado reconciliando
+//      contra Power BI mes a mes. Esta regla es propia de ventas y NO
+//      usa la tabla `sap_prefijos_excluidos` (esa tabla es para decidir
+//      qué artículos entran al catálogo de INVENTARIO, un criterio
+//      distinto — mezclar las dos causó el problema del 16 al 19-sep).
+//
+// No hay ningún filtro por OcrCode2 ni por OcrCode3 — se probaron ambos
+// en algún punto de esta misma investigación y sobraban: excluir por
+// OcrCode2 dejaba fuera notas crédito reales, y OcrCode3 (C30/C31)
+// dejaba fuera ventas reales tageadas con otros valores (C10, C11,
+// C19...). El único centro de costo que importa es OcrCode (punto 3).
+// ============================================================
 
 const { createClient } = require('@supabase/supabase-js');
 
 const SUPABASE_URL = 'https://fpqogvxssnoarzgxcitc.supabase.co';
 const SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
-function prefijoDe(codigo) {
+// Prefijo de letras al inicio de un código SAP (ej. "SEM-002" -> "SEM").
+function prefijoLetras(codigo) {
   const m = (codigo || '').toString().trim().match(/^([A-Za-z]+)/);
   return m ? m[1].toUpperCase() : '';
 }
 
-// Un código queda excluido si coincide EXACTO con algo guardado en
-// `sap_prefijos_excluidos` (ej. "SER_04", para un sub-código puntual)
-// o si su prefijo de letras coincide (ej. "TUZAP", "ACECRUDO" — grupos
-// completos). Se necesitan las dos formas: el prefijo de letras solo
-// no alcanza para distinguir sub-códigos de un mismo grupo (SER_04 vs
-// SER_01, SER_05, SER_10, SER_12, que NO deben excluirse).
-function estaExcluido(codigo, excluidosSet) {
-  const c = (codigo || '').toString().trim().toUpperCase();
-  if (!c) return false;
-  if (excluidosSet.has(c)) return true;
-  const p = prefijoDe(c);
-  return !!p && excluidosSet.has(p);
+function esSemillaDePalma(codigoSap) {
+  return prefijoLetras(codigoSap) === 'SEM';
 }
 
-// Regla confirmada por Carlos (sep-2026): solo se bloquea una fila cuando
-// la columna "Cancelado" trae una letra DISTINTA de "N" (ej. "S"). Si la
-// columna viene vacía o no llega el dato, la fila NO se bloquea — se
-// asume válida, igual que ya hace el filtro del lado del navegador en
-// cargar-ventas.html. Esta función es el mismo criterio aplicado también
-// aquí en el servidor, como segunda capa de protección.
+// Punto 1 de la regla de inclusión (ver comentario de cabecera).
+function esCuentaDeVentaOND(acctCode) {
+  const c = (acctCode || '').toString().trim();
+  return c.startsWith('4135') || c.startsWith('4175');
+}
+
+// Punto 2 de la regla de inclusión: solo pasa "N" exacto. Cualquier otro
+// valor, incluida una casilla vacía o el dato ausente, se bloquea — esta
+// es la misma verificación que ya hace el filtro del lado del navegador
+// en cargar-ventas.html, aplicada otra vez aquí como segunda capa de
+// protección por si algún día se llama a esta función sin pasar por ahí.
 function estaCancelado(valor) {
   const v = (valor === undefined || valor === null) ? '' : String(valor).trim().toUpperCase();
-  if (!v) return false; // sin dato => no se bloquea
   return v !== 'N';
 }
 
@@ -145,19 +167,8 @@ module.exports = async (req, res) => {
       return res.status(400).json({ error: 'No llegó ninguna fila para cargar' });
     }
 
-    // Grupos SAP que no son de Agrotienda (misma lista que usa el
-    // cargador de inventario) — se filtran también aquí.
-    const { data: excluidosRows } = await sbAdmin.from('sap_prefijos_excluidos').select('prefijo');
-    const prefijosExcluidos = new Set((excluidosRows || []).map(r => (r.prefijo || '').toUpperCase()));
-    // NOLI queda excluido del catálogo de INVENTARIO (no es artículo propio
-    // de Agrotienda), pero sí se vende ocasionalmente de mostrador — Carlos
-    // confirmó (sep-2026, reconciliación contra Power BI) que esas ventas
-    // puntuales sí cuentan como venta real de la agrotienda. Se quita solo
-    // de esta copia en memoria — no se toca la tabla `sap_prefijos_excluidos`,
-    // que sigue rigiendo tal cual para la carga de inventario.
-    prefijosExcluidos.delete('NOLI');
-
-    let omitidosPorGrupo = 0;
+    let omitidosPorCuenta = 0;
+    let omitidosPorSemilla = 0;
     let omitidosSinCodigo = 0;
     let omitidosPorCancelado = 0;
     let omitidosPorSede = 0;
@@ -177,13 +188,15 @@ module.exports = async (req, res) => {
 
       if (estaCancelado(f.cancelado)) { omitidosPorCancelado++; continue; }
 
+      if (!esCuentaDeVentaOND(f.acctcode)) { omitidosPorCuenta++; continue; }
+
       const codigo_sap = (f.codigo_sap || '').toString().trim();
       // Una venta real de mostrador siempre trae código de artículo. Las
       // pocas líneas que llegan sin código (ej. "CAMIONETA DUSTER LRQ-524",
       // "TRANSPORTE DE REPUESTOS CABLE VÍA") son movimientos sueltos de
       // SAP que no son productos de la agrotienda (Carlos, sep-2026).
       if (!codigo_sap) { omitidosSinCodigo++; continue; }
-      if (estaExcluido(codigo_sap, prefijosExcluidos)) { omitidosPorGrupo++; continue; }
+      if (esSemillaDePalma(codigo_sap)) { omitidosPorSemilla++; continue; }
 
       const fechaContab = fechaISO(f.fecha);
       const fechaVenc = fechaISO(f.fecha_vencimiento);
@@ -204,7 +217,7 @@ module.exports = async (req, res) => {
     }
 
     const limpios = [...limpiasMap.values()];
-    const duplicadosColapsados = filas.length - sinFacturaOProducto - omitidosPorSede - omitidosPorCancelado - omitidosPorGrupo - omitidosSinCodigo - limpios.length;
+    const duplicadosColapsados = filas.length - sinFacturaOProducto - omitidosPorSede - omitidosPorCancelado - omitidosPorCuenta - omitidosPorSemilla - omitidosSinCodigo - limpios.length;
 
     if (!limpios.length) {
       return res.status(400).json({ error: 'Ninguna fila tenía factura y producto válidos' });
@@ -220,7 +233,7 @@ module.exports = async (req, res) => {
       modulo: 'ventas',
       registros: limpios.length,
       status: 'ok',
-      mensaje: `Cargado por ${perfil.nombre}: ${limpios.length} líneas procesadas, ${omitidosPorSede} omitidas por no tener sede reconocida (OcrCode), ${omitidosPorCancelado} omitidas por estar canceladas, ${omitidosPorGrupo} omitidas por grupos excluidos, ${omitidosSinCodigo} omitidas por no traer código SAP, ${duplicadosColapsados} duplicadas dentro del mismo archivo, ${sinFacturaOProducto} sin factura/producto válidos`,
+      mensaje: `Cargado por ${perfil.nombre}: ${limpios.length} líneas procesadas, ${omitidosPorSede} omitidas por no tener sede reconocida (OcrCode), ${omitidosPorCancelado} omitidas por estar canceladas, ${omitidosPorCuenta} omitidas por cuenta contable distinta de venta/NC, ${omitidosPorSemilla} omitidas por ser semilla de palma, ${omitidosSinCodigo} omitidas por no traer código SAP, ${duplicadosColapsados} duplicadas dentro del mismo archivo, ${sinFacturaOProducto} sin factura/producto válidos`,
     });
 
     return res.status(200).json({
@@ -228,7 +241,8 @@ module.exports = async (req, res) => {
       procesadas: limpios.length,
       omitidosPorSede,
       omitidosPorCancelado,
-      omitidosPorGrupo,
+      omitidosPorCuenta,
+      omitidosPorSemilla,
       omitidosSinCodigo,
       duplicadosColapsados,
       sinFacturaOProducto,

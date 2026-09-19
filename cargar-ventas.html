@@ -111,7 +111,7 @@ const ALIAS = {
   cliente_nit: ['codigo de cliente/proveedor', 'código de cliente/proveedor', 'nit', 'identificacion', 'identificación', 'cedula/nit', 'cédula/nit'],
   vendedor: ['empleado de ventas', 'asesor', 'vendedor'],
   ocr_code: ['ocrcode', 'centro de costo', 'centro de costo (ocrcode)'],
-  ocr_code2: ['ocrcode2'],
+  acctcode: ['acctcode', 'cuenta contable', 'cuenta'],
   cancelado: ['cancelado'],
 };
 
@@ -121,8 +121,27 @@ function sedeDeCentroCosto(valor) {
   if (v === 'BAJIRA' || v === 'BAJIRÁ') return 'Belén de Bajirá';
   return null;
 }
+
+// Prefijo de letras al inicio de un código SAP (ej. "SEM-002" -> "SEM",
+// "AGRO-059" -> "AGRO"). Mismo criterio que usa cargar-inventario.js.
+function prefijoLetras(codigo) {
+  const m = String(codigo || '').trim().match(/^([A-Za-z]+)/);
+  return m ? m[1].toUpperCase() : '';
+}
+
+// Regla validada al peso contra el informe de Power BI (reconciliación
+// completa ene-sep 2026, 19-sep-2026): una fila es venta o nota crédito
+// real de Agrotienda si su cuenta contable (AcctCode) empieza por "4135"
+// (venta) o "4175" (nota crédito — ya viene con "Ingreso Total" negativo,
+// así que sumarla resta sola, sin necesidad de invertir el signo).
+// Cualquier otra cuenta (movimientos internos, ajustes, etc.) se excluye.
+function esCuentaDeVentaOND(acctCode) {
+  const c = String(acctCode || '').trim();
+  return c.startsWith('4135') || c.startsWith('4175');
+}
+
 function normaliza(s) {
-  return String(s || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim();
+  return String(s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').trim();
 }
 function mapaColumnas(headers) {
   const norm = headers.map(normaliza);
@@ -146,7 +165,7 @@ function render() {
 
   document.getElementById('wrap').innerHTML = `
     <div class="aviso">
-      ℹ️ Esta pantalla <b>agrega</b> al histórico de ventas — no reemplaza ni borra nada (a diferencia de la carga de inventario). Si subes el mismo archivo dos veces, o rangos de fecha que se solapan, las líneas repetidas (misma factura + mismo artículo) se actualizan, no se duplican. Solo se cargan filas cuyo <b>centro de costo (OcrCode)</b> reconoce una de las 2 sedes de la agrotienda y con <b>Cancelado = N</b>; los artículos de grupos ya marcados como "no son de Agrotienda" (ver carga de inventario) y las filas de otras áreas del centro de costo (OcrCode2 distinto de "Comercial") también se excluyen automáticamente. La sede se toma del centro de costo real de SAP (Carepa se trata como Chigorodó, por el traslado). Contado/Crédito se calcula solo: mismo día entre fecha de contabilización y fecha de vencimiento = Contado, con plazo = Crédito.
+      ℹ️ Esta pantalla <b>agrega</b> al histórico de ventas — no reemplaza ni borra nada (a diferencia de la carga de inventario). Si subes el mismo archivo dos veces, o rangos de fecha que se solapan, las líneas repetidas (misma factura + mismo artículo) se actualizan, no se duplican. Regla de inclusión, validada al peso contra el informe de Power BI (sep-2026): cuenta contable (AcctCode) que empiece por <b>4135</b> (venta) o <b>4175</b> (nota crédito, se resta sola); <b>Cancelado = N</b> exactamente (cualquier otro valor, incluida una casilla vacía, se excluye); centro de costo (OcrCode) que reconozca una de las 2 sedes (Carepa se trata como Chigorodó, por el traslado); y se excluyen solo los artículos de <b>semilla de palma</b> (prefijo "SEM") — el resto de grupos, incluidos NOLI y AGROLAB, sí cuentan como venta real de la agrotienda. Contado/Crédito se calcula solo: mismo día entre fecha de contabilización y fecha de vencimiento = Contado, con plazo = Crédito.
     </div>
     <div class="card">
       <h3>1. Selecciona el archivo Excel</h3>
@@ -198,6 +217,14 @@ function bind() {
       alert('No se encontró la columna de centro de costo (OcrCode) en el archivo. Es necesaria para saber a qué sede pertenece cada venta — sin ella no se puede cargar con seguridad. Avísale a Claude si el archivo trae otro nombre de columna.');
       return;
     }
+    if (!mapa.acctcode) {
+      alert('No se encontró la columna de cuenta contable (AcctCode) en el archivo. Es necesaria para distinguir ventas y notas crédito reales de otros movimientos de SAP — sin ella no se puede cargar con seguridad. Avísale a Claude si el archivo trae otro nombre de columna.');
+      return;
+    }
+    if (!mapa.cancelado) {
+      alert('No se encontró la columna "Cancelado" en el archivo. Es necesaria para excluir facturas anuladas — sin ella no se puede cargar con seguridad. Avísale a Claude si el archivo trae otro nombre de columna.');
+      return;
+    }
 
     const totalFilasArchivo = json.length;
 
@@ -213,14 +240,15 @@ function bind() {
       cliente_nit: mapa.cliente_nit ? String(row[mapa.cliente_nit] || '').trim() : null,
       vendedor: mapa.vendedor ? String(row[mapa.vendedor] || '').trim() : null,
       sede: mapa.ocr_code ? sedeDeCentroCosto(row[mapa.ocr_code]) : null,
-      _ocrCode2: mapa.ocr_code2 ? String(row[mapa.ocr_code2] || '').trim().toUpperCase() : '',
+      _acctCode: mapa.acctcode ? String(row[mapa.acctcode] || '').trim() : '',
       _cancelado: mapa.cancelado ? String(row[mapa.cancelado] || '').trim().toUpperCase() : '',
     }))
       .filter(f => f.factura && f.producto)
       .filter(f => f.sede)
-      .filter(f => !f._cancelado || f._cancelado === 'N')
-      .filter(f => !f._ocrCode2 || f._ocrCode2 === 'COMERCIA')
-      .map(({ _ocrCode2, _cancelado, ...resto }) => ({ ...resto, cancelado: _cancelado }));
+      .filter(f => f._cancelado === 'N')
+      .filter(f => esCuentaDeVentaOND(f._acctCode))
+      .filter(f => prefijoLetras(f.codigo_sap) !== 'SEM')
+      .map(({ _acctCode, _cancelado, ...resto }) => ({ ...resto, cancelado: _cancelado, acctcode: _acctCode }));
 
     const omitidasPorSedeCliente = totalFilasArchivo - json.filter(row => {
       return !!sedeDeCentroCosto(row[mapa.ocr_code]);
@@ -249,7 +277,7 @@ function bind() {
     const lotes = [];
     for (let i = 0; i < filas.length; i += TAM_LOTE) lotes.push(filas.slice(i, i + TAM_LOTE));
 
-    const totales = { procesadas: 0, omitidosPorSede: 0, omitidosPorCancelado: 0, omitidosPorGrupo: 0, duplicadosColapsados: 0, sinFacturaOProducto: 0 };
+    const totales = { procesadas: 0, omitidosPorSede: 0, omitidosPorCancelado: 0, omitidosPorCuenta: 0, omitidosPorSemilla: 0, duplicadosColapsados: 0, sinFacturaOProducto: 0 };
     let errorMsg = null;
 
     for (let i = 0; i < lotes.length; i++) {
@@ -268,7 +296,8 @@ function bind() {
         totales.procesadas += data.procesadas || 0;
         totales.omitidosPorSede += data.omitidosPorSede || 0;
         totales.omitidosPorCancelado += data.omitidosPorCancelado || 0;
-        totales.omitidosPorGrupo += data.omitidosPorGrupo || 0;
+        totales.omitidosPorCuenta += data.omitidosPorCuenta || 0;
+        totales.omitidosPorSemilla += data.omitidosPorSemilla || 0;
         totales.duplicadosColapsados += data.duplicadosColapsados || 0;
         totales.sinFacturaOProducto += data.sinFacturaOProducto || 0;
       } catch (e) {
@@ -285,7 +314,8 @@ function bind() {
           <span class="chip-r nuevo">${totales.procesadas} procesadas</span>
           ${totales.omitidosPorSede ? `<span class="chip-r elim">${totales.omitidosPorSede} omitidas (sede/OcrCode no reconocido)</span>` : ''}
           ${totales.omitidosPorCancelado ? `<span class="chip-r elim">${totales.omitidosPorCancelado} omitidas (canceladas)</span>` : ''}
-          ${totales.omitidosPorGrupo ? `<span class="chip-r elim">${totales.omitidosPorGrupo} omitidas (grupos excluidos)</span>` : ''}
+          ${totales.omitidosPorCuenta ? `<span class="chip-r elim">${totales.omitidosPorCuenta} omitidas (cuenta contable distinta de venta/NC)</span>` : ''}
+          ${totales.omitidosPorSemilla ? `<span class="chip-r elim">${totales.omitidosPorSemilla} omitidas (semilla de palma)</span>` : ''}
           ${totales.duplicadosColapsados ? `<span class="chip-r">${totales.duplicadosColapsados} duplicadas en el archivo</span>` : ''}
           ${totales.sinFacturaOProducto ? `<span class="chip-r elim">${totales.sinFacturaOProducto} sin factura/producto</span>` : ''}
         </div>

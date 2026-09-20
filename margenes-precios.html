@@ -171,9 +171,32 @@ async function guardar(indices) {
   render();
 }
 
+// Fase 41b (20-sep): Supabase/PostgREST tope típico de 1000 filas por
+// consulta — con los 16 grupos reales confirmados, `inventario` puede
+// superar eso (mismo bug ya resuelto en analisis-inventario.html y
+// seguimiento-inventario.html).
+async function traerTodasLasPaginas(query) {
+  const PAGINA = 1000;
+  let filas = [];
+  let desde = 0;
+  while (true) {
+    const { data, error } = await query.range(desde, desde + PAGINA - 1);
+    if (error) return { data: null, error };
+    filas = filas.concat(data || []);
+    if (!data || data.length < PAGINA) break;
+    desde += PAGINA;
+  }
+  return { data: filas, error: null };
+}
+
 async function cargarDatos() {
   const [{ data: inv, error: errInv }, { data: margenes, error: errMar }] = await Promise.all([
-    sb.from('inventario').select('categoria, cantidad, valor_total'),
+    // No se usa `valor_total` (columna GENERATED heredada del desarrollo
+    // anterior, cuya fórmula exacta nunca se confirmó — ver Fase 41b en
+    // analisis-inventario.html): el costo promedio por categoría, base del
+    // precio público de Módulo 5, se calcula aquí mismo como cantidad ×
+    // costo_unit, los dos campos que sí controla por completo esta app.
+    traerTodasLasPaginas(sb.from('inventario').select('categoria, cantidad, costo_unit')),
     sb.from('margenes_categoria').select('*'),
   ]);
 
@@ -186,9 +209,11 @@ async function cargarDatos() {
   (inv || []).forEach(r => {
     const cat = r.categoria || '(sin categoría)';
     if (!agregados[cat]) agregados[cat] = { count: 0, cantidad: 0, valor: 0 };
+    const cantidad = Number(r.cantidad) || 0;
+    const costo = r.costo_unit !== null && r.costo_unit !== undefined ? Number(r.costo_unit) : 0;
     agregados[cat].count++;
-    agregados[cat].cantidad += Number(r.cantidad) || 0;
-    agregados[cat].valor += Number(r.valor_total) || 0;
+    agregados[cat].cantidad += cantidad;
+    agregados[cat].valor += cantidad * costo;
   });
 
   const margenesMap = new Map((margenes || []).map(m => [m.categoria, m.margen_pct]));

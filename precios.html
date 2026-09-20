@@ -182,12 +182,26 @@ function render() {
 }
 
 (async () => {
-  const { data, error } = await sb.from('listado_precios_publico').select('*');
+  // Fase 41b (20-sep): Supabase/PostgREST tope típico de 1000 filas por
+  // consulta, incluso sobre una vista — con los 16 grupos reales
+  // confirmados, el catálogo puede superar eso (mismo bug ya resuelto en
+  // analisis-inventario.html para la tabla `inventario`).
+  const PAGINA = 1000;
+  let filas = [];
+  let desde = 0;
+  let error = null;
+  while (true) {
+    const { data, error: err } = await sb.from('listado_precios_publico').select('*').range(desde, desde + PAGINA - 1);
+    if (err) { error = err; break; }
+    filas = filas.concat(data || []);
+    if (!data || data.length < PAGINA) break;
+    desde += PAGINA;
+  }
   if (error) {
     document.getElementById('wrap').innerHTML = `<div class="loading">No se pudo cargar el listado de precios. Intenta de nuevo más tarde.</div>`;
     return;
   }
-  productos = data || [];
+  productos = filas;
   render();
 })();
 </script>

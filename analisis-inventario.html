@@ -356,10 +356,33 @@ async function guardarManual(codigoSap) {
     return;
   }
 
+  // Fase 41b (20-sep): Supabase/PostgREST limita cuántas filas devuelve UNA
+  // sola consulta (tope típico del proyecto: 1000), sin importar si se pide
+  // más — con los 16 grupos reales confirmados, `inventario` puede tener
+  // más de 1000 filas artículo×sede (el catálogo real ronda ~1.250, ver
+  // Fase 24), así que un `.select('*')` sin paginar se quedaba corto en
+  // silencio (sin error) y subestimaba cantidad, valor total y todo lo
+  // demás — mismo bug ya resuelto antes para `ventas` en resumen-venta.html
+  // y gerencia-ventas.html. Se trae todo en páginas con `.range()` hasta
+  // que una página vuelva incompleta.
+  async function traerTodasLasPaginas(query) {
+    const PAGINA = 1000;
+    let filas = [];
+    let desde = 0;
+    while (true) {
+      const { data, error } = await query.range(desde, desde + PAGINA - 1);
+      if (error) return { data: null, error };
+      filas = filas.concat(data || []);
+      if (!data || data.length < PAGINA) break;
+      desde += PAGINA;
+    }
+    return { data: filas, error: null };
+  }
+
   const [{ data: inv, error: errInv }, { data: stock }, { data: ventas }] = await Promise.all([
-    sb.from('inventario').select('*').order('producto', { ascending: true }),
-    sb.from('vista_stock_sugerido').select('*'),
-    sb.from('resumen_ventas').select('*'),
+    traerTodasLasPaginas(sb.from('inventario').select('*').order('producto', { ascending: true })),
+    traerTodasLasPaginas(sb.from('vista_stock_sugerido').select('*')),
+    traerTodasLasPaginas(sb.from('resumen_ventas').select('*')),
   ]);
 
   if (errInv) {
@@ -371,6 +394,26 @@ async function guardarManual(codigoSap) {
   (stock || []).forEach(s => { stockPorCodigo[s.codigo_sap] = s; });
   const ventasPorCodigo = {};
   (ventas || []).forEach(v => { ventasPorCodigo[v.codigo_sap] = v; });
+
+  // Fase 41b (20-sep): Carlos reportó que el valor total no cuadraba — daba
+  // la impresión de estar contando una sola unidad por artículo en vez de
+  // cantidad × costo. Causa real: `inventario.valor_total` es una columna
+  // GENERATED de Postgres heredada del desarrollo anterior a este proyecto
+  // (ver Fase 20) — nunca se verificó su fórmula exacta (`\d+ inventario`
+  // en Supabase), solo se asumió que era cantidad × costo_unit. Para no
+  // depender de esa columna heredada sin confirmar, el valor de cada fila
+  // se recalcula aquí directamente a partir de `cantidad` y `costo_unit`
+  // (los dos campos que sí controla por completo la carga de esta app,
+  // ver Fase 40/41) — si algún día se confirma que `valor_total` sí tenía
+  // la fórmula correcta, este cálculo debe dar exactamente el mismo número.
+  function valorFilaInventario(row) {
+    const cantidad = Number(row.cantidad) || 0;
+    const costo = row.costo_unit !== null && row.costo_unit !== undefined ? Number(row.costo_unit) : null;
+    if (costo !== null) return cantidad * costo;
+    // Respaldo por si algún día llega una fila sin costo_unit pero con
+    // valor_total ya calculado (no debería pasar con la carga actual).
+    return Number(row.valor_total) || 0;
+  }
 
   // Agrupa las filas de inventario (una por producto POR SEDE desde la Fase 25) por
   // codigo_sap, sumando la cantidad total y guardando el desglose real por sede — mismo
@@ -394,7 +437,7 @@ async function guardarManual(codigoSap) {
     }
     const acc = porCodigo[key];
     const cant = Number(row.cantidad) || 0;
-    const valorFila = Number(row.valor_total) || 0;
+    const valorFila = valorFilaInventario(row);
     acc.cantidad += cant;
     acc.valorTotal += valorFila;
     acc.sedes[row.sede] = cant;
@@ -408,12 +451,12 @@ async function guardarManual(codigoSap) {
   // Fase 40 (20-sep): valor total del inventario (costo) pedido por Carlos —
   // combinado y por sede, sumado directamente sobre las filas reales de
   // `inventario` (una por producto × sede), no sobre el agrupado por producto.
-  valorTotalGeneral = (inv || []).reduce((s, row) => s + (Number(row.valor_total) || 0), 0);
+  valorTotalGeneral = (inv || []).reduce((s, row) => s + valorFilaInventario(row), 0);
   valorPorSedeGeneral = {};
   SEDES.forEach(sede => {
     valorPorSedeGeneral[sede] = (inv || [])
       .filter(row => row.sede === sede)
-      .reduce((s, row) => s + (Number(row.valor_total) || 0), 0);
+      .reduce((s, row) => s + valorFilaInventario(row), 0);
   });
 
   productos = Object.values(porCodigo).map(p => {

@@ -265,8 +265,19 @@ async function renderSorteo() {
 
 async function abrirConteo(sorteoId) {
   if (!inventarioTodo.length) {
-    const { data } = await sb.from('inventario').select('id,producto,categoria,cantidad,unidad').order('producto');
-    inventarioTodo = data || [];
+    // Fase 41b (20-sep): Supabase/PostgREST tope típico de 1000 filas por
+    // consulta — con los 16 grupos reales confirmados, `inventario` puede
+    // superar eso (mismo bug ya resuelto en analisis-inventario.html).
+    const PAGINA = 1000;
+    let filas = [];
+    let desde = 0;
+    while (true) {
+      const { data } = await sb.from('inventario').select('id,producto,categoria,cantidad,unidad').order('producto').range(desde, desde + PAGINA - 1);
+      filas = filas.concat(data || []);
+      if (!data || data.length < PAGINA) break;
+      desde += PAGINA;
+    }
+    inventarioTodo = filas;
   }
   if (!sesionConteo[sorteoId]) sesionConteo[sorteoId] = [];
 

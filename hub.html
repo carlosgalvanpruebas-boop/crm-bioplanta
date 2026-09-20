@@ -144,15 +144,23 @@ function tagTexto(nivel) {
   return 'Sin acceso';
 }
 
-function renderGrupo(numero, nivel, esSuperAdmin) {
+function renderGrupo(numero, nivel, esSuperAdmin, submodulosParciales) {
   const g = SUBMODULOS[numero];
   const activo = esSuperAdmin || nivel === 'completo' || nivel === 'parcial';
   const nivelMostrado = esSuperAdmin ? 'completo' : nivel;
+  const subsPermitidos = submodulosParciales || [];
+  // Bug encontrado 19-sep-2026 (Carlos, con el perfil de Juan Correa):
+  // con nivel "parcial" se desbloqueaban TODOS los submódulos del grupo,
+  // en vez de solo los marcados en el Panel de Accesos (columna
+  // submodulos_parciales de permisos_modulo). "Completo" sigue
+  // desbloqueando todo el grupo; "parcial" ahora respeta la lista exacta.
   const itemsHtml = g.items.map(it => {
-    if (it.listo && activo) {
+    const desbloqueado = esSuperAdmin || nivel === 'completo' || (nivel === 'parcial' && subsPermitidos.includes(it.id));
+    if (it.listo && desbloqueado) {
       return `<a class="sub-item" href="${it.href}"><span>${it.id} ${it.nombre}</span><span class="badge-count" data-badge="${it.id}" style="display:none"></span></a>`;
     }
-    return `<div class="sub-item pronto"><span>${it.id} ${it.nombre}</span><span class="sub-badge">Próximamente</span></div>`;
+    const etiqueta = it.listo ? '🔒 Sin acceso' : 'Próximamente';
+    return `<div class="sub-item pronto"><span>${it.id} ${it.nombre}</span><span class="sub-badge">${etiqueta}</span></div>`;
   }).join('');
 
   return `
@@ -287,14 +295,17 @@ async function salir() {
     document.getElementById('btn-cargar-info').style.display = 'inline-block';
   }
 
-  const nivel1 = (permisos || []).find(p => p.modulo === 1)?.nivel || 'inactivo';
-  const nivel2 = (permisos || []).find(p => p.modulo === 2)?.nivel || 'inactivo';
-  const nivel3 = (permisos || []).find(p => p.modulo === 3)?.nivel || 'inactivo';
+  const permiso1 = (permisos || []).find(p => p.modulo === 1);
+  const permiso2 = (permisos || []).find(p => p.modulo === 2);
+  const permiso3 = (permisos || []).find(p => p.modulo === 3);
+  const nivel1 = permiso1?.nivel || 'inactivo';
+  const nivel2 = permiso2?.nivel || 'inactivo';
+  const nivel3 = permiso3?.nivel || 'inactivo';
 
   let html = '<div class="sec-t">Tus módulos</div><div class="grid">';
-  html += renderGrupo(1, nivel1, perfil.es_super_admin);
-  html += renderGrupo(2, nivel2, perfil.es_super_admin);
-  html += renderGrupo(3, nivel3, perfil.es_super_admin);
+  html += renderGrupo(1, nivel1, perfil.es_super_admin, permiso1?.submodulos_parciales);
+  html += renderGrupo(2, nivel2, perfil.es_super_admin, permiso2?.submodulos_parciales);
+  html += renderGrupo(3, nivel3, perfil.es_super_admin, permiso3?.submodulos_parciales);
   html += '</div>';
 
   html += '<div class="sec-t">Acceso público (para todos)</div><div class="grid">';

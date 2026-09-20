@@ -133,6 +133,39 @@ let ventas = [];
 // cualquier rango de fechas (no solo el mes en curso):
 // { 'Chigorodó': { '2026-9': { monto, punto_equilibrio }, ... }, ... }
 let presupuestoTodo = {};
+
+// Rentabilidad estimada (20-sep, a petición de Carlos: "es un valor que
+// siempre tenemos en cuenta en las revisiones de ventas"). Se calcula como
+// utilidad = valor de venta − (cantidad × costo ACTUAL del producto en
+// inventario) — usa el costo de HOY, no el costo real que tenía el
+// producto el día exacto de esa venta (eso no se guarda en ningún lado,
+// `ventas` no tiene un campo de costo propio), así que es un estimado,
+// más preciso mientras más reciente sea la venta. `costoPorClave` cruza
+// por (codigo_sap, sede) — el costo real puede ser distinto entre las 2
+// sedes; `costoPorCodigoCualquierSede` es el respaldo cuando la venta no
+// tiene sede reconocida (histórico viejo, antes de la Fase 37) o cuando
+// el producto solo tiene costo cargado en la otra sede.
+let costoPorClave = {};
+let costoPorCodigoCualquierSede = {};
+function costoUnitDe(codigo_sap, sede) {
+  if (!codigo_sap) return null;
+  const porSede = costoPorClave[codigo_sap + '||' + sede];
+  if (porSede !== undefined && porSede !== null) return porSede;
+  const cualquiera = costoPorCodigoCualquierSede[codigo_sap];
+  return cualquiera !== undefined ? cualquiera : null;
+}
+// Costo de una línea de venta, o null si no se pudo determinar (producto
+// sin costo cargado en inventario hoy — ej. ya no se vende, o nunca se
+// cargó bien la carga de inventario) — en ese caso la línea se deja fuera
+// del cálculo de utilidad en vez de asumir costo 0, para no inflar la
+// rentabilidad real.
+function costoDeLinea(v) {
+  const cantidad = Number(v.cantidad) || 0;
+  if (!v.codigo_sap || !cantidad) return null;
+  const costoUnit = costoUnitDe(v.codigo_sap, v.sede);
+  if (costoUnit === null) return null;
+  return cantidad * costoUnit;
+}
 let filtroRango = 'mes';
 let customDesde = '';
 let customHasta = '';
@@ -184,11 +217,11 @@ function filtrarPorRango(filas, desde, hasta) {
   return filas.filter(v => v.fecha && v.fecha >= desde && v.fecha <= hasta);
 }
 
-// Totales por sede: vendido / contado / crédito / # facturas, para un
-// conjunto de filas ya filtrado por fecha.
+// Totales por sede: vendido / contado / crédito / # facturas / utilidad
+// estimada, para un conjunto de filas ya filtrado por fecha.
 function statsPorSede(filas) {
   const r = {};
-  SEDES.forEach(s => r[s] = { total: 0, contado: 0, credito: 0, facturas: new Set() });
+  SEDES.forEach(s => r[s] = { total: 0, contado: 0, credito: 0, facturas: new Set(), costo: 0, utilidad: 0, valorSinCosto: 0 });
   filas.forEach(v => {
     if (!v.sede || !r[v.sede]) return; // ventas sin sede reconocida no entran en el comparativo
     const valor = Number(v.valor) || 0;
@@ -196,6 +229,13 @@ function statsPorSede(filas) {
     if (v.forma_pago === 'Contado') r[v.sede].contado += valor;
     else if (v.forma_pago === 'Crédito') r[v.sede].credito += valor;
     r[v.sede].facturas.add(v.factura);
+    const costoLinea = costoDeLinea(v);
+    if (costoLinea === null) {
+      r[v.sede].valorSinCosto += valor; // no se pudo estimar costo de esta línea — queda fuera de costo/utilidad
+    } else {
+      r[v.sede].costo += costoLinea;
+      r[v.sede].utilidad += (valor - costoLinea);
+    }
   });
   return r;
 }
@@ -344,6 +384,12 @@ function render() {
   const contadoCombinado = SEDES.reduce((acc, s) => acc + porSede[s].contado, 0);
   const creditoCombinado = SEDES.reduce((acc, s) => acc + porSede[s].credito, 0);
   const facturasCombinado = SEDES.reduce((acc, s) => acc + porSede[s].facturas.size, 0);
+  // Rentabilidad estimada combinada (20-sep) — ver nota en costoDeLinea().
+  const utilidadCombinada = SEDES.reduce((acc, s) => acc + porSede[s].utilidad, 0);
+  const costoCombinado = SEDES.reduce((acc, s) => acc + porSede[s].costo, 0);
+  const valorSinCostoCombinado = SEDES.reduce((acc, s) => acc + porSede[s].valorSinCosto, 0);
+  const ventaConCostoCombinada = totalCombinado - valorSinCostoCombinado;
+  const margenPctCombinado = ventaConCostoCombinada ? Math.round((utilidadCombinada / ventaConCostoCombinada) * 1000) / 10 : null;
 
   const meses = mesesDelAnio();
   const filas = tablaMensual(ventas, meses);
@@ -380,11 +426,29 @@ function render() {
     </div>
 
     <div class="card">
+      <h3>📊 Rentabilidad estimada (ambas sedes)</h3>
+      <div class="sub">${etiquetaRango} — utilidad = venta − (cantidad × costo ACTUAL del producto en inventario). Usa el costo de hoy, no el costo real que tenía cada producto el día exacto de esa venta (no se guarda), así que es un estimado — más preciso mientras más reciente sea la venta.</div>
+      <div style="display:flex;gap:28px;flex-wrap:wrap;align-items:baseline;margin-bottom:6px">
+        <div>
+          <div style="font-size:34px;font-weight:800;color:var(--v1)">${fmtMoneda(utilidadCombinada)}</div>
+          <div style="font-size:11px;color:#888">Utilidad estimada</div>
+        </div>
+        <div>
+          <div style="font-size:34px;font-weight:800;color:var(--v2)">${margenPctCombinado == null ? '—' : `${margenPctCombinado}%`}</div>
+          <div style="font-size:11px;color:#888">Margen sobre venta</div>
+        </div>
+      </div>
+      <div style="font-size:12px;color:#777">Costo estimado ${fmtMoneda(costoCombinado)}${valorSinCostoCombinado > 0 ? ` · ${fmtMoneda(valorSinCostoCombinado)} en ventas sin costo actual disponible (producto ya no está en inventario, o sin costo cargado) — quedan fuera de este cálculo` : ''}</div>
+    </div>
+
+    <div class="card">
       <h3>🏬 Comparativo por sede</h3>
       <div class="sub">Según el rango seleccionado arriba</div>
       <div class="sedes-grid">
         ${SEDES.map(sede => {
           const s = porSede[sede];
+          const ventaConCosto = s.total - s.valorSinCosto;
+          const margenSede = ventaConCosto ? Math.round((s.utilidad / ventaConCosto) * 1000) / 10 : null;
           return `
           <div class="sede-card">
             <div class="sede-nom">📍 ${sede}</div>
@@ -392,6 +456,7 @@ function render() {
             <div class="sede-sub">${s.facturas.size} factura${s.facturas.size === 1 ? '' : 's'} · ticket prom. ${fmtMoneda(s.facturas.size ? s.total / s.facturas.size : 0)}</div>
             <div class="sede-mini"><span>Contado</span><b>${fmtMoneda(s.contado)}</b></div>
             <div class="sede-mini credito"><span>Crédito</span><b>${fmtMoneda(s.credito)}</b></div>
+            <div class="sede-mini"><span>Utilidad estimada</span><b>${fmtMoneda(s.utilidad)}${margenSede == null ? '' : ` (${margenSede}%)`}</b></div>
           </div>`;
         }).join('')}
       </div>
@@ -521,13 +586,14 @@ function render() {
   }
 
   // Igual que en 1.3: Supabase limita cuántas filas devuelve una sola
-  // consulta, así que se trae todo en páginas con .range().
+  // consulta, así que se trae todo en páginas con .range(). Se agregan
+  // codigo_sap y cantidad (20-sep) para poder estimar la rentabilidad.
   let ventasCargadas = [];
   let errVentas = null;
   const PAGINA = 1000;
   let desde = 0;
   while (true) {
-    const { data, error } = await sb.from('ventas').select('factura,fecha,valor,sede,forma_pago').order('fecha', { ascending: false }).range(desde, desde + PAGINA - 1);
+    const { data, error } = await sb.from('ventas').select('factura,fecha,valor,sede,forma_pago,codigo_sap,cantidad').order('fecha', { ascending: false }).range(desde, desde + PAGINA - 1);
     if (error) { errVentas = error; break; }
     ventasCargadas = ventasCargadas.concat(data || []);
     if (!data || data.length < PAGINA) break;
@@ -538,6 +604,27 @@ function render() {
     return;
   }
   ventas = ventasCargadas;
+
+  // Costo actual por (codigo_sap, sede) para la rentabilidad estimada
+  // (20-sep) — mismo patrón de paginación, `inventario` puede superar las
+  // 1000 filas (ver Fase 41b en analisis-inventario.html).
+  let invCargado = [];
+  desde = 0;
+  while (true) {
+    const { data, error } = await sb.from('inventario').select('codigo_sap,sede,costo_unit').range(desde, desde + PAGINA - 1);
+    if (error) break; // si falla, la rentabilidad simplemente queda sin datos (mapas vacíos) en vez de tumbar toda la pantalla
+    invCargado = invCargado.concat(data || []);
+    if (!data || data.length < PAGINA) break;
+    desde += PAGINA;
+  }
+  costoPorClave = {};
+  costoPorCodigoCualquierSede = {};
+  invCargado.forEach(row => {
+    if (row.costo_unit === null || row.costo_unit === undefined) return;
+    const costo = Number(row.costo_unit);
+    costoPorClave[row.codigo_sap + '||' + row.sede] = costo;
+    if (costoPorCodigoCualquierSede[row.codigo_sap] === undefined) costoPorCodigoCualquierSede[row.codigo_sap] = costo;
+  });
 
   // Se trae todo el historial de presupuesto_venta (es una tabla chica,
   // una fila por sede/mes) para poder prorratear cualquier rango de

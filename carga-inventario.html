@@ -231,6 +231,29 @@ function sedeDeAlmacen(nombreAlmacen) {
   return null; // otro almacén (planta, viveros, semillas...) — se excluye
 }
 
+// Fase 41 (20-sep): lista definitiva de los 16 grupos reales de la
+// agrotienda que Carlos confirmó (más angosta que los 22 "grupos reales"
+// detectados en la Fase 24 — quedaron afuera COMESTIBLES, EPP,
+// PRODUCTOS TERMINADOS, COMERCIALIZACION MATERIAL VEGETAL, HERRAMIENTA y
+// FUNGIBLES, que en su momento tenían muy pocos artículos y ya no se
+// consideran inventario real de las 2 sedes). Cuando el archivo trae una
+// columna real de "Nombre de grupo" (no la categoría deducida por
+// prefijo de código), cualquier grupo que no esté en esta lista se
+// descarta automáticamente — esto es lo que traía "muchos grupos y
+// artículos que no son ni hacen parte del inventario de cada sede"
+// (ej. de la extractora, viveros, semillas) cuando el archivo no tenía
+// columna de almacén para filtrarlos por esa otra vía.
+const GRUPOS_AGROTIENDA_RAW = [
+  'ACCESORIOS - A', 'HERBICIDAS', 'COMERCIALIZACION ALMACEN AGRO', 'FUNGICIDAS',
+  'POLINIZACION', 'COAYUDANTES', 'INSECTICIDAS', 'FERTILIZANTES', 'BIOLOGICOS',
+  'REPUESTOS-A', 'EPP-A', 'MAQUINARIA Y FUMIGADORES', 'FERTILIZANTES FOLIARES',
+  'HERRAMIENTAS-A', 'MASCOTAS', 'VETERINARIA',
+];
+function normalizaGrupo(s) {
+  return normaliza(s).replace(/\s*-\s*/g, '-').replace(/\s+/g, ' ').trim();
+}
+const GRUPOS_AGROTIENDA = new Set(GRUPOS_AGROTIENDA_RAW.map(normalizaGrupo));
+
 async function procesarArchivo(file, sedeDefault) {
   const buf = await file.arrayBuffer();
   const wb = XLSX.read(buf, { type: 'array' });
@@ -250,6 +273,7 @@ async function procesarArchivo(file, sedeDefault) {
 
   const filasArchivo = [];
   let descartadosOtroAlmacen = 0;
+  let descartadosGrupoNoAgrotienda = 0;
   let tieneColumnaAlmacen = false;
 
   for (const nombreHoja of hojasConDatos) {
@@ -272,6 +296,15 @@ async function procesarArchivo(file, sedeDefault) {
         costo_unit = Math.round((valorReportado / cantidad) * 10000) / 10000;
       }
       const categoria = mapa.categoria ? String(row[mapa.categoria] || '').trim() || null : categoriaPorPrefijo(codigo_sap);
+      // Solo se puede comparar contra la lista de 16 grupos reales cuando el
+      // archivo trae la columna real "Nombre de grupo" — la categoría deducida
+      // por prefijo de código (formato viejo, sin esa columna) usa nombres
+      // distintos ("Herramientas y suministros agrícolas", etc.) y no se
+      // puede comparar de forma confiable contra esta lista.
+      if (mapa.categoria && !GRUPOS_AGROTIENDA.has(normalizaGrupo(categoria))) {
+        descartadosGrupoNoAgrotienda++;
+        return;
+      }
       const proveedor = mapa.proveedor ? String(row[mapa.proveedor] || '').trim() || null : null;
       const unidad = mapa.unidad ? String(row[mapa.unidad] || '').trim() || null : null;
 
@@ -291,7 +324,7 @@ async function procesarArchivo(file, sedeDefault) {
     });
   }
 
-  return { filas: filasArchivo, descartadosOtroAlmacen, tieneColumnaAlmacen, modoHojasPorSede };
+  return { filas: filasArchivo, descartadosOtroAlmacen, descartadosGrupoNoAgrotienda, tieneColumnaAlmacen, modoHojasPorSede };
 }
 
 // Suma cantidad (y promedia el costo unitario ponderado por cantidad) de
@@ -361,10 +394,11 @@ function render() {
   const cols = preview.length ? ['codigo_sap', 'producto', 'categoria', 'sede', 'cantidad', 'costo_unit', 'proveedor', 'unidad'].filter(c => c in preview[0]) : [];
 
   const descartadosAlmacen = SEDES.reduce((s, sede) => s + (archivosPorSede[sede]?.descartadosOtroAlmacen || 0), 0);
+  const descartadosGrupo = SEDES.reduce((s, sede) => s + (archivosPorSede[sede]?.descartadosGrupoNoAgrotienda || 0), 0);
 
   document.getElementById('wrap').innerHTML = `
     <div class="aviso">
-      ℹ️ Esta pantalla reemplaza el inventario de cada sede con lo que traiga su archivo: actualiza los artículos que ya existen en esa sede (sin tocar los ajustes manuales de mínimo/máximo), agrega los nuevos, y elimina los que ya no aparezcan — pero <b>solo para la o las sedes que efectivamente subas esta vez</b>. Si hoy solo subes el archivo de una sede, la otra queda exactamente como estaba.
+      ℹ️ Esta pantalla reemplaza el inventario de cada sede con lo que traiga su archivo: actualiza los artículos que ya existen en esa sede (sin tocar los ajustes manuales de mínimo/máximo), agrega los nuevos, y elimina los que ya no aparezcan — pero <b>solo para la o las sedes que efectivamente subas esta vez</b>. Si hoy solo subes el archivo de una sede, la otra queda exactamente como estaba. Cuando el archivo trae grupo real (columna "Nombre de grupo"), solo se cargan los 16 grupos confirmados como inventario real de la agrotienda (Accesorios-A, Herbicidas, Comercialización almacén agro, Fungicidas, Polinización, Coayudantes, Insecticidas, Fertilizantes, Biológicos, Repuestos-A, EPP-A, Maquinaria y fumigadores, Fertilizantes foliares, Herramientas-A, Mascotas, Veterinaria) — cualquier otro grupo se descarta automáticamente.
     </div>
     <div class="card">
       <h3>1. Selecciona los archivos por sede</h3>
@@ -385,6 +419,7 @@ function render() {
         `).join('')}
       </div>
       ${descartadosAlmacen ? `<div style="font-size:11.5px;color:#999;margin-top:10px">ℹ️ ${descartadosAlmacen} filas se descartaron por pertenecer a un almacén que no es Chigorodó ni Belén de Bajirá (planta, viveros, semillas, etc.).</div>` : ''}
+      ${descartadosGrupo ? `<div style="font-size:11.5px;color:#999;margin-top:6px">ℹ️ ${descartadosGrupo} filas se descartaron por pertenecer a un grupo que no es de los 16 confirmados como inventario real de la agrotienda.</div>` : ''}
       ${mensajeResultado}
     </div>
     ${combinadas.length ? `

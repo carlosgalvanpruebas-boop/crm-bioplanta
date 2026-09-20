@@ -147,27 +147,36 @@ function tagTexto(nivel) {
 function renderGrupo(numero, nivel, esSuperAdmin, submodulosParciales) {
   const g = SUBMODULOS[numero];
   const activo = esSuperAdmin || nivel === 'completo' || nivel === 'parcial';
+  // Fase 19-sep-2026 (pedido de Carlos): si el módulo está Inactivo para
+  // esta persona, la tarjeta completa ni siquiera se muestra — antes
+  // aparecía igual, solo que bloqueada con 🔒, y eso generaba ruido/dudas
+  // (ej. el perfil de Juan Correa mostrando módulos que no le tocan).
+  if (!activo) return '';
   const nivelMostrado = esSuperAdmin ? 'completo' : nivel;
   const subsPermitidos = submodulosParciales || [];
-  // Bug encontrado 19-sep-2026 (Carlos, con el perfil de Juan Correa):
-  // con nivel "parcial" se desbloqueaban TODOS los submódulos del grupo,
-  // en vez de solo los marcados en el Panel de Accesos (columna
-  // submodulos_parciales de permisos_modulo). "Completo" sigue
-  // desbloqueando todo el grupo; "parcial" ahora respeta la lista exacta.
-  const itemsHtml = g.items.map(it => {
-    const desbloqueado = esSuperAdmin || nivel === 'completo' || (nivel === 'parcial' && subsPermitidos.includes(it.id));
-    if (it.listo && desbloqueado) {
+  // Con nivel "parcial" solo se listan los submódulos marcados en el
+  // Panel de Accesos (columna submodulos_parciales) — los demás no
+  // aparecen (antes se mostraban todos desbloqueados; luego se mostraban
+  // bloqueados con "Sin acceso" — ahora, igual que el módulo completo
+  // inactivo, simplemente no se listan). "Completo" sigue mostrando
+  // todos los submódulos del grupo.
+  const itemsHtml = g.items.filter(it => {
+    if (esSuperAdmin || nivel === 'completo') return true;
+    return subsPermitidos.includes(it.id);
+  }).map(it => {
+    if (it.listo) {
       return `<a class="sub-item" href="${it.href}"><span>${it.id} ${it.nombre}</span><span class="badge-count" data-badge="${it.id}" style="display:none"></span></a>`;
     }
-    const etiqueta = it.listo ? '🔒 Sin acceso' : 'Próximamente';
-    return `<div class="sub-item pronto"><span>${it.id} ${it.nombre}</span><span class="sub-badge">${etiqueta}</span></div>`;
+    return `<div class="sub-item pronto"><span>${it.id} ${it.nombre}</span><span class="sub-badge">Próximamente</span></div>`;
   }).join('');
 
+  if (!itemsHtml) return '';
+
   return `
-    <div class="grp ${activo ? '' : 'locked'}">
+    <div class="grp">
       <div class="grp-top">
         <div class="grp-ico">${g.icono}</div>
-        <div class="grp-tag ${tagClase(nivelMostrado)}">${activo ? tagTexto(nivelMostrado) : '🔒 Sin acceso'}</div>
+        <div class="grp-tag ${tagClase(nivelMostrado)}">${tagTexto(nivelMostrado)}</div>
       </div>
       <div class="grp-nom">${numero}. ${g.nombre}</div>
       <div class="sub-list">${itemsHtml}</div>

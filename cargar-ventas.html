@@ -203,11 +203,22 @@ function bind() {
     mensajeResultado = '';
     const buf = await file.arrayBuffer();
     const wb = XLSX.read(buf, { type: 'array', cellDates: true });
-    const hoja = wb.Sheets[wb.SheetNames[0]];
-    const json = XLSX.utils.sheet_to_json(hoja, { defval: null });
+    // Se leen TODAS las hojas del archivo, no solo la primera — así se
+    // puede subir un Excel con la factura en una hoja y las notas
+    // crédito en otra (o cualquier otra combinación de hojas), siempre
+    // que compartan las mismas columnas de SAP. Las filas de todas las
+    // hojas se juntan antes de aplicar el filtro de siempre.
+    let json = [];
+    wb.SheetNames.forEach(nombreHoja => {
+      const filasHoja = XLSX.utils.sheet_to_json(wb.Sheets[nombreHoja], { defval: null });
+      json = json.concat(filasHoja);
+    });
     if (!json.length) { alert('El archivo no tiene filas.'); return; }
 
-    const headers = Object.keys(json[0]);
+    // Los encabezados se toman de la unión de columnas de todas las
+    // filas (no solo la primera), por si las hojas no tienen exactamente
+    // las mismas columnas en el mismo orden.
+    const headers = Array.from(new Set(json.flatMap(row => Object.keys(row))));
     const mapa = mapaColumnas(headers);
     if (!mapa.factura || !mapa.producto) {
       alert('No se encontró una columna de factura y/o descripción del producto. Revisa que el archivo tenga esos datos, o avísale a Claude para ajustar los nombres de columna reconocidos.');

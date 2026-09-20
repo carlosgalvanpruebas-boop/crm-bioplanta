@@ -36,6 +36,37 @@ const SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
 const SEDES_VALIDAS = new Set(['Chigorodó', 'Belén de Bajirá']);
 
+// Fase 42 (20-sep): Supabase/PostgREST tiene un tope de ~1000 filas por
+// consulta. `inventario` hoy tiene bastante más que eso contando todo lo
+// que ha ido quedando de cargas anteriores (grupos ajenos a la agrotienda
+// incluidos) — sin paginar, `existentes` (usado para decidir qué borrar)
+// se quedaba silenciosamente con solo las primeras ~1000 filas de las
+// sedes pedidas, así que cualquier fila vieja fuera de esas primeras 1000
+// nunca se consideraba "existente" y por lo tanto NUNCA se borraba, sin
+// importar cuántas veces se volviera a subir el archivo correcto. Este es
+// el bug real detrás del reporte de Carlos de que seguían apareciendo
+// artículos de otros grupos (ELECTRICOS, BOMBAS Y MOTORES, TUERCAS Y
+// TORNILLOS, etc.) después de re-subir el inventario ya filtrado. Mismo
+// patrón de paginación ya aplicado en varias pantallas del navegador
+// (Fase 41b) — aquí hacía falta también, en el servidor.
+async function traerTodasLasPaginas(sbAdmin, sedesIncluidas) {
+  const PAGINA = 1000;
+  let desde = 0;
+  let todas = [];
+  while (true) {
+    const { data, error } = await sbAdmin
+      .from('inventario')
+      .select('codigo_sap, sede')
+      .in('sede', sedesIncluidas)
+      .range(desde, desde + PAGINA - 1);
+    if (error) throw error;
+    todas = todas.concat(data || []);
+    if (!data || data.length < PAGINA) break;
+    desde += PAGINA;
+  }
+  return todas;
+}
+
 module.exports = async (req, res) => {
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Método no permitido' });
@@ -130,11 +161,7 @@ module.exports = async (req, res) => {
     // se limita a estas, nunca toca una sede que no vino en este envío.
     const sedesIncluidas = [...new Set(limpios.map(a => a.sede))];
 
-    const { data: existentes, error: existentesError } = await sbAdmin
-      .from('inventario')
-      .select('codigo_sap, sede')
-      .in('sede', sedesIncluidas);
-    if (existentesError) throw existentesError;
+    const existentes = await traerTodasLasPaginas(sbAdmin, sedesIncluidas);
 
     const clavesExistentes = new Set((existentes || []).map(x => x.codigo_sap + '||' + x.sede));
     const actualizados = limpios.filter(a => clavesExistentes.has(a.codigo_sap + '||' + a.sede)).length;
@@ -156,12 +183,21 @@ module.exports = async (req, res) => {
         .filter(x => x.sede === sede && !codigosDeEstaSede.has(x.codigo_sap))
         .map(x => x.codigo_sap);
       if (aEliminar.length) {
-        const { error: deleteError } = await sbAdmin
-          .from('inventario')
-          .delete()
-          .eq('sede', sede)
-          .in('codigo_sap', aEliminar);
-        if (deleteError) throw deleteError;
+        // El borrado también se hace en lotes (mismo tope de ~1000 por
+        // consulta, esta vez del lado del `.in()` de la condición de
+        // borrado, no de la lectura) — por seguridad ante el mismo tipo
+        // de límite si algún día hay miles de artículos que borrar de
+        // una sola vez.
+        const LOTE = 1000;
+        for (let i = 0; i < aEliminar.length; i += LOTE) {
+          const lote = aEliminar.slice(i, i + LOTE);
+          const { error: deleteError } = await sbAdmin
+            .from('inventario')
+            .delete()
+            .eq('sede', sede)
+            .in('codigo_sap', lote);
+          if (deleteError) throw deleteError;
+        }
         eliminados += aEliminar.length;
       }
     }

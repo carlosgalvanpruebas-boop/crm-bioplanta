@@ -29,6 +29,9 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:#f0f4f0;color:var(--
 .ind.proximo b{color:#b8860b}
 .ind.sobre b{color:var(--v1)}
 .ind.normal b{color:var(--v2)}
+.ind.valor b{color:var(--v1);font-size:18px}
+.ind.compra b{color:var(--vino)}
+.indicadores-valor{margin-bottom:14px}
 
 .filtros{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px;align-items:center}
 .filtros select,.filtros input{border:1.5px solid #d6e2d9;border-radius:8px;padding:8px 10px;font-size:12.5px;font-family:inherit}
@@ -111,6 +114,12 @@ const SUPABASE_KEY = 'sb_publishable_ccZF-8tenblFEah5lXfd3w_mYTHMtMC';
 const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
 const SEDES = ['Chigorodó', 'Belén de Bajirá'];
+// Fase 40 (20-sep): cuánto debe durar el stock antes de que llegue el
+// siguiente pedido — 30 días de stock objetivo + 7 días que se demora el
+// proveedor en despachar, confirmado por Carlos.
+const DIAS_STOCK_OBJETIVO = 30;
+const DIAS_DESPACHO_PROVEEDOR = 7;
+const DIAS_COBERTURA_OBJETIVO = DIAS_STOCK_OBJETIVO + DIAS_DESPACHO_PROVEEDOR; // 37
 
 let esSuperAdmin = false;
 let puedeEditar = false;
@@ -118,8 +127,11 @@ let productos = [];
 let filtroEstado = 'todos';
 let filtroSede = 'todas';
 let filtroTexto = '';
+let filtroNecesitaCompra = false;
 let orden = 'cobertura';
 let editandoCodigo = null;
+let valorTotalGeneral = 0;
+let valorPorSedeGeneral = {};
 
 function fmtFecha(iso) {
   if (!iso) return '—';
@@ -128,6 +140,10 @@ function fmtFecha(iso) {
 function fmtNum(n) {
   if (n === null || n === undefined) return '—';
   return Number(n).toLocaleString('es-CO', { maximumFractionDigits: 1 });
+}
+function fmtMoneda(n) {
+  if (n === null || n === undefined) return '—';
+  return Number(n).toLocaleString('es-CO', { style: 'currency', currency: 'COP', maximumFractionDigits: 0 });
 }
 // Convierte un codigo_sap en un id de HTML seguro (por si trae espacios u otros caracteres)
 function idSafe(s) {
@@ -157,12 +173,28 @@ function renderIndicadores(lista) {
   const proximo = lista.filter(p => calcularEstado(p) === 'proximo').length;
   const sobre = lista.filter(p => calcularEstado(p) === 'sobre').length;
   const normal = lista.filter(p => calcularEstado(p) === 'normal').length;
+  const necesitanCompra = lista.filter(p => (p.sugeridoCompra || 0) > 0).length;
   return `
     <div class="indicadores">
       <div class="ind sinstock"><b>${sinstock}</b><span>Sin stock</span></div>
       <div class="ind proximo"><b>${proximo}</b><span>Próximos a agotarse</span></div>
       <div class="ind sobre"><b>${sobre}</b><span>Sobre stock</span></div>
       <div class="ind normal"><b>${normal}</b><span>Normal</span></div>
+      <div class="ind compra"><b>${necesitanCompra}</b><span>Necesitan compra ahora</span></div>
+    </div>
+  `;
+}
+
+// Fase 40 (20-sep): valor total del inventario (costo, no precio de venta) —
+// combinado y por sede, pedido explícitamente por Carlos. Se calcula sobre
+// TODOS los productos (no sobre la lista ya filtrada por búsqueda/estado),
+// igual que renderIndicadores(productos) — es una cifra de cabecera, no
+// algo que deba cambiar al buscar un producto puntual.
+function renderIndicadoresValor() {
+  return `
+    <div class="indicadores indicadores-valor">
+      <div class="ind valor"><b>${fmtMoneda(valorTotalGeneral)}</b><span>Valor total inventario (costo)</span></div>
+      ${SEDES.map(s => `<div class="ind valor"><b>${fmtMoneda(valorPorSedeGeneral[s] || 0)}</b><span>Valor en ${s}</span></div>`).join('')}
     </div>
   `;
 }
@@ -170,6 +202,7 @@ function renderIndicadores(lista) {
 function aplicarFiltros() {
   let lista = productos.filter(p => {
     if (filtroEstado !== 'todos' && calcularEstado(p) !== filtroEstado) return false;
+    if (filtroNecesitaCompra && !((p.sugeridoCompra || 0) > 0)) return false;
     if (filtroSede !== 'todas' && p.sedes[filtroSede] === undefined) return false;
     if (filtroTexto && !(p.producto || '').toLowerCase().includes(filtroTexto.toLowerCase())) return false;
     return true;
@@ -180,6 +213,8 @@ function aplicarFiltros() {
       const cb = b.coberturaDias === null ? Infinity : b.coberturaDias;
       return ca - cb;
     });
+  } else if (orden === 'sugerido') {
+    lista = lista.slice().sort((a, b) => (b.sugeridoCompra || 0) - (a.sugeridoCompra || 0));
   } else {
     lista = lista.slice().sort((a, b) => (b.ventas30 || 0) - (a.ventas30 || 0));
   }
@@ -215,21 +250,24 @@ function render() {
         const minTiene = p.stock_minimo_manual !== null && p.stock_minimo_manual !== undefined;
         const maxTiene = p.stock_maximo_manual !== null && p.stock_maximo_manual !== undefined;
         const desgloseSedes = SEDES.map(s => `${s}: ${p.sedes[s] !== undefined ? fmtNum(p.sedes[s]) : '—'}`).join(' · ');
+        const urlReporteConSugerido = urlReporte && p.sugeridoCompra ? `${urlReporte}&cantidad_sugerida=${encodeURIComponent(p.sugeridoCompra)}` : urlReporte;
         return `
           <div class="fila">
             <div class="f-info">
               <div class="f-prod">${p.producto || '(sin nombre)'}</div>
-              <div class="f-meta">${p.categoria || 'Sin categoría'} · Actualizado: ${fmtFecha(p.actualizado_en)}</div>
+              <div class="f-meta">${p.categoria || 'Sin categoría'} · Actualizado: ${fmtFecha(p.actualizado_en)} · Valor: ${fmtMoneda(p.valorTotal)}</div>
               <div class="f-sedes">📍 ${desgloseSedes}</div>
             </div>
             <div class="f-datos">
               <div class="f-num"><b>${fmtNum(p.cantidad)}</b><span>${p.unidad || 'unid.'} (total)</span></div>
               <div class="f-num"><b>${fmtNum(p.ventas30)}</b><span>venta 30d</span></div>
               <div class="f-num"><b>${p.coberturaDias !== null ? fmtNum(p.coberturaDias) + 'd' : '—'}</b><span>cobertura</span></div>
+              <div class="f-num"><b>${p.rotacionMensual !== null ? fmtNum(p.rotacionMensual) + 'x' : '—'}</b><span>rotación/mes</span></div>
               <div class="f-num"><b>${fmtNum(p.minimoEfectivo)}</b>${minTiene ? '<span class="manual-tag">manual</span>' : '<span>mínimo</span>'}</div>
               <div class="f-num"><b>${fmtNum(p.maximoEfectivo)}</b>${maxTiene ? '<span class="manual-tag">manual</span>' : '<span>máximo</span>'}</div>
+              <div class="f-num"><b>${p.sugeridoCompra !== null ? fmtNum(p.sugeridoCompra) : '—'}</b><span>sugerido (37d)</span></div>
               ${badgeEstado(estado)}
-              ${urlReporte ? `<a class="btn-mini" href="${urlReporte}">📩 Reportar</a>` : ''}
+              ${urlReporteConSugerido ? `<a class="btn-mini" href="${urlReporteConSugerido}">📩 Reportar</a>` : ''}
               ${puedeEditar ? (editandoCodigo === p.codigo_sap ? filaEditar(p) : `<button class="btn-mini editar" onclick="editandoCodigo='${p.codigo_sap}'; render()">✏️ Ajustar</button>`) : ''}
             </div>
           </div>
@@ -239,8 +277,9 @@ function render() {
 
   document.getElementById('wrap').innerHTML = `
     <div class="aviso">
-      ℹ️ "Venta 30d" y "cobertura" vienen del histórico real de ventas (hoy solo hay datos de prueba, no el día a día real). Cobertura = días que dura el stock actual al ritmo de venta de los últimos 30 días — se marca "Próximo a agotarse" cuando quedan 7 días o menos (el mismo tiempo de entrega usado en 1.5). Cada producto tiene ahora una fila de inventario por sede: la cantidad, el estado y el mínimo/máximo se calculan sobre el <b>total combinado de ambas sedes</b> (igual que en 1.5), y abajo de cada producto se muestra el desglose real por sede. El mínimo/máximo mostrado es el calculado automáticamente en 1.5, salvo que ${puedeEditar ? 'lo ajustes manualmente con el botón "✏️ Ajustar" (se aplica al producto completo, en ambas sedes, para no dejar valores distintos entre sedes)' : 'alguien con Módulo 2 completo lo haya ajustado manualmente'}.
+      ℹ️ "Venta 30d" y "cobertura" vienen del histórico real de ventas (hoy solo hay datos de prueba, no el día a día real). Cobertura = días que dura el stock actual al ritmo de venta de los últimos 30 días — se marca "Próximo a agotarse" cuando quedan 7 días o menos (el mismo tiempo de entrega usado en 1.5). "Rotación/mes" = cuántas veces se vendería el stock actual completo en un mes al ritmo de los últimos 30 días (venta 30d ÷ existencia). "Sugerido (37d)" es cuánto comprar HOY para que el stock alcance a durar 37 días — 30 días de stock objetivo + 7 días que se demora el proveedor en despachar — calculado como venta diaria promedio × 37 menos lo que ya hay; en 0 cuando ya hay más de lo necesario. El valor de inventario (costo, no precio de venta) se muestra combinado y por sede arriba, y por producto junto a la categoría. Cada producto tiene ahora una fila de inventario por sede: la cantidad, el estado y el mínimo/máximo se calculan sobre el <b>total combinado de ambas sedes</b> (igual que en 1.5), y abajo de cada producto se muestra el desglose real por sede. El mínimo/máximo mostrado es el calculado automáticamente en 1.5, salvo que ${puedeEditar ? 'lo ajustes manualmente con el botón "✏️ Ajustar" (se aplica al producto completo, en ambas sedes, para no dejar valores distintos entre sedes)' : 'alguien con Módulo 2 completo lo haya ajustado manualmente'}.
     </div>
+    ${renderIndicadoresValor()}
     ${renderIndicadores(productos)}
     <div class="filtros">
       <select onchange="filtroSede=this.value; render()">
@@ -251,11 +290,13 @@ function render() {
       <select onchange="orden=this.value; render()">
         <option value="cobertura" ${orden === 'cobertura' ? 'selected' : ''}>Más urgente primero (menor cobertura)</option>
         <option value="rotacion" ${orden === 'rotacion' ? 'selected' : ''}>Mayor rotación primero (más venta)</option>
+        <option value="sugerido" ${orden === 'sugerido' ? 'selected' : ''}>Mayor sugerido de compra primero</option>
       </select>
       <button class="filtro-chip ${filtroEstado === 'todos' ? 'act' : ''}" onclick="filtroEstado='todos'; render()">Todos</button>
       <button class="filtro-chip ${filtroEstado === 'sinstock' ? 'act' : ''}" onclick="filtroEstado='sinstock'; render()">Sin stock</button>
       <button class="filtro-chip ${filtroEstado === 'proximo' ? 'act' : ''}" onclick="filtroEstado='proximo'; render()">Próximos a agotarse</button>
       <button class="filtro-chip ${filtroEstado === 'sobre' ? 'act' : ''}" onclick="filtroEstado='sobre'; render()">Sobre stock</button>
+      <button class="filtro-chip ${filtroNecesitaCompra ? 'act' : ''}" onclick="filtroNecesitaCompra=!filtroNecesitaCompra; render()">🛒 Necesita compra</button>
       <input type="text" placeholder="Buscar producto..." value="${filtroTexto}" oninput="filtroTexto=this.value; render()">
     </div>
     <div class="card">${filasHtml}</div>
@@ -345,6 +386,7 @@ async function guardarManual(codigoSap) {
         unidad: row.unidad,
         actualizado_en: row.actualizado_en,
         cantidad: 0,
+        valorTotal: 0,
         sedes: {},
         stock_minimo_manual: null,
         stock_maximo_manual: null,
@@ -352,13 +394,26 @@ async function guardarManual(codigoSap) {
     }
     const acc = porCodigo[key];
     const cant = Number(row.cantidad) || 0;
+    const valorFila = Number(row.valor_total) || 0;
     acc.cantidad += cant;
+    acc.valorTotal += valorFila;
     acc.sedes[row.sede] = cant;
     // Si alguna de las filas por sede tiene un ajuste manual guardado, se usa ese valor
     // para el producto completo (guardarManual ahora escribe el mismo valor en ambas filas).
     if (row.stock_minimo_manual !== null && row.stock_minimo_manual !== undefined) acc.stock_minimo_manual = row.stock_minimo_manual;
     if (row.stock_maximo_manual !== null && row.stock_maximo_manual !== undefined) acc.stock_maximo_manual = row.stock_maximo_manual;
     if (!acc.actualizado_en || new Date(row.actualizado_en) > new Date(acc.actualizado_en)) acc.actualizado_en = row.actualizado_en;
+  });
+
+  // Fase 40 (20-sep): valor total del inventario (costo) pedido por Carlos —
+  // combinado y por sede, sumado directamente sobre las filas reales de
+  // `inventario` (una por producto × sede), no sobre el agrupado por producto.
+  valorTotalGeneral = (inv || []).reduce((s, row) => s + (Number(row.valor_total) || 0), 0);
+  valorPorSedeGeneral = {};
+  SEDES.forEach(sede => {
+    valorPorSedeGeneral[sede] = (inv || [])
+      .filter(row => row.sede === sede)
+      .reduce((s, row) => s + (Number(row.valor_total) || 0), 0);
   });
 
   productos = Object.values(porCodigo).map(p => {
@@ -368,7 +423,20 @@ async function guardarManual(codigoSap) {
     const stock_maximo_sugerido = s ? s.stock_maximo_sugerido : null;
     const ventas30 = v ? Number(v.ventas_30d) : null;
     const cantidad = Number(p.cantidad) || 0;
-    const coberturaDias = (ventas30 && ventas30 > 0) ? Math.round((cantidad / (ventas30 / 30)) * 10) / 10 : null;
+    const ventaDiaria = (ventas30 !== null && ventas30 > 0) ? ventas30 / 30 : null;
+    const coberturaDias = ventaDiaria !== null ? Math.round((cantidad / ventaDiaria) * 10) / 10 : null;
+    // Rotación mensual: cuántas veces "rota" (se vende) el stock actual en
+    // un mes, al ritmo de los últimos 30 días — solo tiene sentido si hay
+    // algo de stock; si está en cero, la rotación no es calculable (no hay
+    // sobre qué medir el giro, aunque sí haya venta reciente).
+    const rotacionMensual = (ventas30 !== null && cantidad > 0) ? Math.round((ventas30 / cantidad) * 100) / 100 : null;
+    // Sugerido de compra (Fase 40, 20-sep): cuánto pedir HOY para que el
+    // stock alcance a durar DIAS_COBERTURA_OBJETIVO (37 = 30 de stock + 7
+    // de despacho del proveedor), calculado con la venta diaria promedio de
+    // los últimos 30 días. Sin datos de venta no hay forma confiable de
+    // sugerir nada (queda en null, no en 0, para no dar a entender "no
+    // necesita comprar" cuando en realidad es "no sabemos").
+    const sugeridoCompra = ventaDiaria !== null ? Math.max(0, Math.ceil(ventaDiaria * DIAS_COBERTURA_OBJETIVO - cantidad)) : null;
     return {
       ...p,
       stock_minimo_sugerido,
@@ -377,6 +445,8 @@ async function guardarManual(codigoSap) {
       maximoEfectivo: (p.stock_maximo_manual !== null && p.stock_maximo_manual !== undefined) ? p.stock_maximo_manual : stock_maximo_sugerido,
       ventas30,
       coberturaDias,
+      rotacionMensual,
+      sugeridoCompra,
     };
   });
 

@@ -13,13 +13,18 @@
 // Recibe el listado completo de artículos ya parseado desde el
 // Excel (lo hace el navegador con la librería SheetJS, este
 // archivo no toca Excel directamente) y actualiza `inventario`:
-//   - Actualiza los artículos que ya existían (por código SAP),
-//     sin tocar su `sede` ni sus ajustes manuales de mínimo/máximo
-//     (esas columnas no se pisan).
+//   - Actualiza los artículos que ya existían (por código SAP +
+//     sede — desde la Fase 25 la tabla real tiene una fila por
+//     (codigo_sap, sede), con restricción única
+//     `inventario_codigo_sap_sede_key`), sin tocar sus ajustes
+//     manuales de mínimo/máximo (esas columnas no se pisan).
 //   - Inserta los artículos nuevos.
-//   - Elimina los que ya no aparecen en el archivo (se asume que
-//     el archivo que sube Diego es el listado COMPLETO del día,
-//     no un incremento).
+//   - Elimina, DENTRO DE CADA SEDE QUE VINO EN ESTA CARGA, los que
+//     ya no aparecen en el archivo de esa sede (Fase 40, 20-sep):
+//     como ahora se puede subir el archivo de una sola sede a la
+//     vez, el borrado NUNCA toca una sede que no vino en este
+//     envío — de lo contrario, cargar solo Chigorodó hoy borraría
+//     por error todo el inventario de Belén de Bajirá.
 // Deja un registro en `sync_log` con el resultado, para que quede
 // un historial de cada carga.
 // ============================================================
@@ -28,6 +33,8 @@ const { createClient } = require('@supabase/supabase-js');
 
 const SUPABASE_URL = 'https://fpqogvxssnoarzgxcitc.supabase.co';
 const SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+const SEDES_VALIDAS = new Set(['Chigorodó', 'Belén de Bajirá']);
 
 module.exports = async (req, res) => {
   if (req.method !== 'POST') {
@@ -74,57 +81,89 @@ module.exports = async (req, res) => {
       return res.status(400).json({ error: 'No llegó ningún artículo para cargar' });
     }
 
-    // Validación básica de cada fila
-    const limpios = [];
+    // Validación básica de cada fila + defensa adicional: si dos filas
+    // comparten la misma clave (codigo_sap + sede) — normalmente ya no
+    // debería pasar, porque el navegador las suma antes de enviar
+    // (Fase 40, 20-sep) — se suman aquí también en vez de sobrescribir,
+    // para no perder en silencio la existencia de ninguna de las dos.
+    const limpiosMap = new Map();
     for (const a of articulos) {
       const codigo_sap = (a.codigo_sap || '').toString().trim();
       const producto = (a.producto || '').toString().trim();
-      if (!codigo_sap || !producto) continue;
-      limpios.push({
-        codigo_sap,
-        producto,
-        categoria: a.categoria ? String(a.categoria).trim() : null,
-        proveedor: a.proveedor ? String(a.proveedor).trim() : null,
-        unidad: a.unidad ? String(a.unidad).trim() : null,
-        cantidad: a.cantidad !== undefined && a.cantidad !== null ? Number(a.cantidad) : 0,
-        costo_unit: a.costo_unit !== undefined && a.costo_unit !== null ? Number(a.costo_unit) : null,
-        // valor_total NO se envía: es una columna calculada automáticamente
-        // por la base de datos (cantidad × costo_unit) y Postgres rechaza
-        // cualquier intento de escribirla directamente.
-        actualizado_en: new Date().toISOString(),
-      });
+      const sede = (a.sede || '').toString().trim();
+      if (!codigo_sap || !producto || !SEDES_VALIDAS.has(sede)) continue;
+
+      const cantidad = a.cantidad !== undefined && a.cantidad !== null ? Number(a.cantidad) : 0;
+      const costo_unit = a.costo_unit !== undefined && a.costo_unit !== null ? Number(a.costo_unit) : null;
+      const clave = codigo_sap + '||' + sede;
+      const existente = limpiosMap.get(clave);
+      if (existente) {
+        const cantidadTotal = (Number(existente.cantidad) || 0) + cantidad;
+        const valorExistente = existente.costo_unit !== null ? existente.costo_unit * (Number(existente.cantidad) || 0) : 0;
+        const valorNuevo = costo_unit !== null ? costo_unit * cantidad : 0;
+        existente.cantidad = cantidadTotal;
+        existente.costo_unit = cantidadTotal ? Math.round(((valorExistente + valorNuevo) / cantidadTotal) * 10000) / 10000 : costo_unit;
+      } else {
+        limpiosMap.set(clave, {
+          codigo_sap,
+          sede,
+          producto,
+          categoria: a.categoria ? String(a.categoria).trim() : null,
+          proveedor: a.proveedor ? String(a.proveedor).trim() : null,
+          unidad: a.unidad ? String(a.unidad).trim() : null,
+          cantidad,
+          costo_unit,
+          // valor_total NO se envía: es una columna calculada automáticamente
+          // por la base de datos (cantidad × costo_unit) y Postgres rechaza
+          // cualquier intento de escribirla directamente.
+          actualizado_en: new Date().toISOString(),
+        });
+      }
     }
 
+    const limpios = [...limpiosMap.values()];
     if (!limpios.length) {
-      return res.status(400).json({ error: 'Ningún artículo tenía código y nombre válidos' });
+      return res.status(400).json({ error: 'Ningún artículo tenía código, nombre y sede válidos (sede debe ser Chigorodó o Belén de Bajirá)' });
     }
 
-    const codigosNuevos = limpios.map(a => a.codigo_sap);
+    // Sedes que efectivamente vinieron en esta carga — el borrado de abajo
+    // se limita a estas, nunca toca una sede que no vino en este envío.
+    const sedesIncluidas = [...new Set(limpios.map(a => a.sede))];
 
     const { data: existentes, error: existentesError } = await sbAdmin
       .from('inventario')
-      .select('codigo_sap');
+      .select('codigo_sap, sede')
+      .in('sede', sedesIncluidas);
     if (existentesError) throw existentesError;
 
-    const codigosExistentes = new Set((existentes || []).map(x => x.codigo_sap));
-    const codigosSet = new Set(codigosNuevos);
-    const actualizados = codigosNuevos.filter(c => codigosExistentes.has(c)).length;
-    const nuevos = codigosNuevos.filter(c => !codigosExistentes.has(c)).length;
-    const aEliminar = [...codigosExistentes].filter(c => !codigosSet.has(c));
+    const clavesExistentes = new Set((existentes || []).map(x => x.codigo_sap + '||' + x.sede));
+    const actualizados = limpios.filter(a => clavesExistentes.has(a.codigo_sap + '||' + a.sede)).length;
+    const nuevos = limpios.length - actualizados;
 
-    // Upsert por código SAP — no pisa `sede` ni `stock_minimo_manual` /
+    // Upsert por (código SAP, sede) — no pisa `stock_minimo_manual` /
     // `stock_maximo_manual` porque esas columnas no se incluyen aquí.
     const { error: upsertError } = await sbAdmin
       .from('inventario')
-      .upsert(limpios, { onConflict: 'codigo_sap' });
+      .upsert(limpios, { onConflict: 'codigo_sap,sede' });
     if (upsertError) throw upsertError;
 
-    if (aEliminar.length) {
-      const { error: deleteError } = await sbAdmin
-        .from('inventario')
-        .delete()
-        .in('codigo_sap', aEliminar);
-      if (deleteError) throw deleteError;
+    // Borrado por sede: dentro de cada sede que vino en este archivo, se
+    // borra lo que ya no aparece — nunca se toca una sede que no vino.
+    let eliminados = 0;
+    for (const sede of sedesIncluidas) {
+      const codigosDeEstaSede = new Set(limpios.filter(a => a.sede === sede).map(a => a.codigo_sap));
+      const aEliminar = (existentes || [])
+        .filter(x => x.sede === sede && !codigosDeEstaSede.has(x.codigo_sap))
+        .map(x => x.codigo_sap);
+      if (aEliminar.length) {
+        const { error: deleteError } = await sbAdmin
+          .from('inventario')
+          .delete()
+          .eq('sede', sede)
+          .in('codigo_sap', aEliminar);
+        if (deleteError) throw deleteError;
+        eliminados += aEliminar.length;
+      }
     }
 
     await sbAdmin.from('sync_log').insert({
@@ -132,7 +171,7 @@ module.exports = async (req, res) => {
       modulo: 'inventario',
       registros: limpios.length,
       status: 'ok',
-      mensaje: `Cargado por ${perfil.nombre}: ${nuevos} nuevos, ${actualizados} actualizados, ${aEliminar.length} eliminados (ya no estaban en el archivo)`,
+      mensaje: `Cargado por ${perfil.nombre} (${sedesIncluidas.join(' y ')}): ${nuevos} nuevos, ${actualizados} actualizados, ${eliminados} eliminados`,
     });
 
     return res.status(200).json({
@@ -140,7 +179,8 @@ module.exports = async (req, res) => {
       total: limpios.length,
       nuevos,
       actualizados,
-      eliminados: aEliminar.length,
+      eliminados,
+      sedes: sedesIncluidas,
     });
   } catch (e) {
     try {

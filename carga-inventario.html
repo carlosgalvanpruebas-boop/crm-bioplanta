@@ -24,8 +24,9 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:#f0f4f0;color:var(--
 .card{background:#fff;border-radius:16px;padding:20px;box-shadow:0 2px 10px rgba(0,0,0,.07);margin-bottom:18px}
 .card h3{font-size:14px;color:var(--v1);margin-bottom:10px}
 
-.drop{border:2px dashed #b7d0bb;border-radius:12px;padding:30px;text-align:center;color:#777;font-size:13px}
-input[type=file]{margin-top:12px}
+.drop{border:2px dashed #b7d0bb;border-radius:12px;padding:20px;text-align:center;color:#777;font-size:13px}
+.drop b{color:var(--v1)}
+input[type=file]{margin-top:12px;max-width:100%}
 .btn{background:var(--v2);color:#fff;border:none;border-radius:8px;padding:10px 18px;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit}
 .btn:disabled{opacity:.5;cursor:default}
 .btn-sec{background:var(--vbg);color:var(--v1)}
@@ -42,6 +43,7 @@ th{color:var(--v2);font-size:11px;text-transform:uppercase}
 .msg{padding:10px 14px;border-radius:8px;font-size:13px;margin-top:10px}
 .msg.ok{background:#e6f4ea;color:#256d3b}
 .msg.err{background:#fde3e2;color:var(--vino)}
+.msg.aviso-dup{background:var(--beige);color:#7a4a00}
 
 .hist-row{display:flex;justify-content:space-between;gap:10px;padding:8px 0;border-bottom:1px solid var(--vbg);font-size:12px}
 .hist-row:last-child{border-bottom:none}
@@ -57,7 +59,11 @@ th{color:var(--v2);font-size:11px;text-transform:uppercase}
 .tag-excl{font-size:10px;font-weight:700;padding:2px 8px;border-radius:8px;background:#fde3e2;color:var(--vino);margin-left:6px}
 .mini-form{display:flex;gap:8px;margin-top:12px;flex-wrap:wrap}
 .mini-form input{border:1.5px solid #d6e2d9;border-radius:8px;padding:7px 10px;font-size:12.5px;font-family:inherit}
-.btn-x{background:none;border:none;color:var(--vino);cursor:pointer;font-size:14px;padding:0 6px}
+.btn-x{background:none;border:1.5px solid var(--vino);color:var(--vino);cursor:pointer;font-size:11px;padding:4px 10px;border-radius:8px;margin-top:10px;font-weight:700}
+
+.slots{display:flex;gap:14px;flex-wrap:wrap;margin-bottom:6px}
+.slot{flex:1;min-width:220px}
+.slot .cargado{margin-top:8px;font-size:12px;color:var(--v2);font-weight:700}
 
 /* === Fase 36: rediseno visual desde cero con los 3 colores oficiales de marca (verde #4f7c5a, vino #984745, beige #E6CEAB), tipografia profesional, logo real y mejor contraste === */
 @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
@@ -110,6 +116,8 @@ const SUPABASE_URL = 'https://fpqogvxssnoarzgxcitc.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_ccZF-8tenblFEah5lXfd3w_mYTHMtMC';
 const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
+const SEDES = ['Chigorodó', 'Belén de Bajirá'];
+
 // Mismo criterio de categoría por prefijo de código SAP usado al cargar
 // el primer listado real (Fase 17) — se usa como respaldo mientras SAP
 // no entregue un campo real de "Grupo de artículos".
@@ -154,7 +162,7 @@ function categoriaPorPrefijo(codigo) {
 
 // Alias de encabezados posibles — para que el mismo cargador sirva tanto
 // con el reporte de saldo que ya conocemos, como con un export más
-// completo el día que SAP entregue grupo/proveedor/unidad reales.
+// completo el día que SAP entregue grupo/proveedor/unidad/almacén reales.
 // El orden de cada lista importa: se busca la variante MÁS ESPECÍFICA
 // primero (ej. "cantidad acumulada", el saldo real) antes que la más
 // genérica (ej. "cantidad", que en el reporte de movimientos de SAP
@@ -163,13 +171,21 @@ function categoriaPorPrefijo(codigo) {
 // columnas parecidas.
 const ALIAS = {
   codigo_sap: ['numero de articulo', 'número de artículo', 'codigo sap', 'código sap', 'codigo', 'código', 'item code'],
-  producto: ['descripcion', 'descripción', 'nombre', 'producto', 'item name'],
-  categoria: ['grupo de articulos', 'grupo de artículos', 'grupo', 'categoria', 'categoría', 'item group'],
+  // "descripcion del articulo" es el encabezado real del formato de la Fase
+  // 24 (el mismo export que trae la columna de almacén) — sin este alias
+  // exacto, ese archivo no reconocía ni código ni producto y la detección
+  // de sede por almacén nunca llegaba a evaluarse (hallazgo Fase 40).
+  producto: ['descripcion del articulo', 'descripción del artículo', 'descripcion', 'descripción', 'nombre', 'producto', 'item name'],
+  categoria: ['nombre de grupo', 'grupo de articulos', 'grupo de artículos', 'grupo', 'categoria', 'categoría', 'item group'],
   proveedor: ['proveedor', 'vendor'],
   unidad: ['unidad de medida', 'unidad', 'um', 'unit'],
-  cantidad: ['cantidad acumulada', 'existencia', 'stock', 'in stock', 'cantidad'],
-  costo_unit: ['costo unitario', 'costo', 'precio'],
+  cantidad: ['cantidad acumulada', 'existencia', 'en stock', 'stock', 'in stock', 'cantidad'],
+  costo_unit: ['costo unitario', 'precio promedio', 'costo', 'precio'],
   valor_total: ['valor acumulado', 'valor total', 'valor'],
+  // Fase 24: reporte de SAP con desglose por almacén — "Nombre de almacén"
+  // es lo único que sirve para deducir la sede (el código de almacén no
+  // se conoce), por eso es el único alias real aquí.
+  almacen: ['nombre de almacen', 'nombre de almacén'],
 };
 function normaliza(s) {
   return String(s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').trim();
@@ -182,20 +198,147 @@ function mapaColumnas(headers) {
     // que aparecen las columnas del archivo), para que la variante más
     // específica gane si el archivo trae varias columnas parecidas.
     for (const a of alias) {
-      const idx = norm.indexOf(a);
+      const idx = norm.indexOf(normaliza(a));
       if (idx !== -1) { mapa[campo] = headers[idx]; break; }
     }
   });
   return mapa;
 }
 
-let filas = [];              // todas las filas detectadas en el archivo (antes de excluir)
+// Fase 40 (20-sep): el inventario real es por sede, y el reporte que Carlos
+// puede sacar de SAP no siempre trae una columna de almacén (eso solo pasa
+// con el formato completo de la Fase 24). Carlos propuso dos formas de
+// indicar la sede al cargar: (a) un archivo separado por sede, o (b) un
+// mismo archivo con una hoja por sede. Se soportan las dos, más la
+// columna de almacén cuando está disponible, con esta prioridad por fila:
+//   1. Columna de almacén reconocida en el archivo (mapea a la sede real,
+//      o descarta la fila si es de otro almacén — regla de la Fase 24).
+//   2. Nombre de la hoja de Excel, si CADA hoja con datos del archivo
+//      coincide con el nombre de una sede real.
+//   3. La sede de la casilla en la que se subió el archivo (para el caso
+//      más simple: un archivo por sede, sin ninguna de las dos señales
+//      anteriores).
+function detectarSedeDeHoja(nombreHoja) {
+  const n = normaliza(nombreHoja);
+  if (n.includes('chigorod')) return 'Chigorodó';
+  if (n.includes('bajira')) return 'Belén de Bajirá';
+  return null;
+}
+function sedeDeAlmacen(nombreAlmacen) {
+  const n = normaliza(nombreAlmacen);
+  if (n.includes('chigorod')) return 'Chigorodó';
+  if (n.includes('bajira')) return 'Belén de Bajirá';
+  return null; // otro almacén (planta, viveros, semillas...) — se excluye
+}
+
+async function procesarArchivo(file, sedeDefault) {
+  const buf = await file.arrayBuffer();
+  const wb = XLSX.read(buf, { type: 'array' });
+
+  // Lee todas las hojas con filas (soporta el mismo archivo con una hoja
+  // por sede, o un archivo con hojas auxiliares vacías que se ignoran).
+  const hojasConDatos = [];
+  const jsonPorHoja = {};
+  wb.SheetNames.forEach(nombreHoja => {
+    const json = XLSX.utils.sheet_to_json(wb.Sheets[nombreHoja], { defval: null });
+    if (json.length) { hojasConDatos.push(nombreHoja); jsonPorHoja[nombreHoja] = json; }
+  });
+
+  const sedesPorHoja = {};
+  hojasConDatos.forEach(n => { sedesPorHoja[n] = detectarSedeDeHoja(n); });
+  const modoHojasPorSede = hojasConDatos.length > 1 && hojasConDatos.every(n => sedesPorHoja[n] !== null);
+
+  const filasArchivo = [];
+  let descartadosOtroAlmacen = 0;
+  let tieneColumnaAlmacen = false;
+
+  for (const nombreHoja of hojasConDatos) {
+    const json = jsonPorHoja[nombreHoja];
+    const headers = Object.keys(json[0]);
+    const mapa = mapaColumnas(headers);
+    if (!mapa.codigo_sap || !mapa.producto) continue; // se valida a nivel de archivo completo más abajo
+    if (mapa.almacen) tieneColumnaAlmacen = true;
+
+    const sedeDeHoja = modoHojasPorSede ? sedesPorHoja[nombreHoja] : null;
+
+    json.forEach(row => {
+      const codigo_sap = String(row[mapa.codigo_sap] || '').trim();
+      const producto = String(row[mapa.producto] || '').trim();
+      if (!codigo_sap || !producto) return;
+      const cantidad = mapa.cantidad ? Number(row[mapa.cantidad]) || 0 : 0;
+      const valorReportado = mapa.valor_total ? Number(row[mapa.valor_total]) || null : null;
+      let costo_unit = mapa.costo_unit ? Number(row[mapa.costo_unit]) || null : null;
+      if (costo_unit === null && valorReportado !== null && cantidad) {
+        costo_unit = Math.round((valorReportado / cantidad) * 10000) / 10000;
+      }
+      const categoria = mapa.categoria ? String(row[mapa.categoria] || '').trim() || null : categoriaPorPrefijo(codigo_sap);
+      const proveedor = mapa.proveedor ? String(row[mapa.proveedor] || '').trim() || null : null;
+      const unidad = mapa.unidad ? String(row[mapa.unidad] || '').trim() || null : null;
+
+      let sede;
+      if (mapa.almacen) {
+        const sedeAlmacen = sedeDeAlmacen(row[mapa.almacen]);
+        if (!sedeAlmacen) { descartadosOtroAlmacen++; return; }
+        sede = sedeAlmacen;
+      } else if (sedeDeHoja) {
+        sede = sedeDeHoja;
+      } else {
+        sede = sedeDefault;
+      }
+
+      const valor_total = costo_unit !== null ? Math.round(cantidad * costo_unit) : valorReportado;
+      filasArchivo.push({ codigo_sap, producto, categoria, proveedor, unidad, cantidad, costo_unit, valor_total, sede });
+    });
+  }
+
+  return { filas: filasArchivo, descartadosOtroAlmacen, tieneColumnaAlmacen, modoHojasPorSede };
+}
+
+// Suma cantidad (y promedia el costo unitario ponderado por cantidad) de
+// filas que comparten el mismo código de artículo Y la misma sede —
+// mismo criterio ya usado para el mismo problema en `cargar-ventas.html`
+// (Fase 37): si el mismo producto aparece dos veces (dos hojas, o el
+// mismo archivo subido sin querer en las dos casillas), sumarlas es más
+// seguro que sobrescribir en silencio y perder existencia real.
+function colapsarDuplicados(lista) {
+  const colapsadas = new Map();
+  let duplicados = 0;
+  for (const f of lista) {
+    const clave = f.codigo_sap + '||' + f.sede;
+    const valorFila = f.costo_unit !== null && f.costo_unit !== undefined
+      ? f.costo_unit * (Number(f.cantidad) || 0)
+      : (f.valor_total !== null ? Number(f.valor_total) : 0);
+    const existente = colapsadas.get(clave);
+    if (existente) {
+      existente.cantidad = (Number(existente.cantidad) || 0) + (Number(f.cantidad) || 0);
+      existente._valorAcumulado = (existente._valorAcumulado || 0) + valorFila;
+      duplicados++;
+    } else {
+      colapsadas.set(clave, { ...f, _valorAcumulado: valorFila });
+    }
+  }
+  const filas = [...colapsadas.values()].map(f => {
+    const cantidad = Number(f.cantidad) || 0;
+    const costo_unit = cantidad ? Math.round((f._valorAcumulado / cantidad) * 10000) / 10000 : (f.costo_unit ?? null);
+    const valor_total = costo_unit !== null ? Math.round(cantidad * costo_unit) : f.valor_total;
+    const { _valorAcumulado, ...resto } = f;
+    return { ...resto, costo_unit, valor_total };
+  });
+  return { filas, duplicados };
+}
+
+let archivosPorSede = { 'Chigorodó': null, 'Belén de Bajirá': null }; // { nombreArchivo, filas, descartadosOtroAlmacen, modoHojasPorSede } por sede
 let excluidos = new Map();   // prefijo (mayúsculas) -> fila de sap_prefijos_excluidos
 let checkboxExcluir = new Set(); // prefijos marcados como "excluir" en la vista previa actual
 let esSuperAdmin = false;
 let puedeAdministrarExcluidos = false;
 let sesionActual = null;
 let mensajeResultado = '';
+let filasParaEnviar = []; // calculado en cada render(), usado tal cual por el botón "Confirmar"
+
+function filasCombinadas() {
+  return SEDES.flatMap(s => archivosPorSede[s]?.filas || []);
+}
 
 function resumenPorPrefijo(lista) {
   const m = {};
@@ -208,27 +351,45 @@ function resumenPorPrefijo(lista) {
 }
 
 function render() {
-  const resumen = resumenPorPrefijo(filas);
+  const combinadas = filasCombinadas();
+  const resumen = resumenPorPrefijo(combinadas);
   const prefijosOrdenados = Object.keys(resumen).sort((a, b) => resumen[b].count - resumen[a].count);
-  const filasIncluidas = filas.filter(f => !estaExcluido(f.codigo_sap, checkboxExcluir));
+  const sinExcluir = combinadas.filter(f => !estaExcluido(f.codigo_sap, checkboxExcluir));
+  const { filas: filasIncluidas, duplicados } = colapsarDuplicados(sinExcluir);
+  filasParaEnviar = filasIncluidas;
   const preview = filasIncluidas.slice(0, 5);
-  const cols = preview.length ? Object.keys(preview[0]) : [];
+  const cols = preview.length ? ['codigo_sap', 'producto', 'categoria', 'sede', 'cantidad', 'costo_unit', 'proveedor', 'unidad'].filter(c => c in preview[0]) : [];
+
+  const descartadosAlmacen = SEDES.reduce((s, sede) => s + (archivosPorSede[sede]?.descartadosOtroAlmacen || 0), 0);
 
   document.getElementById('wrap').innerHTML = `
     <div class="aviso">
-      ℹ️ Esta pantalla reemplaza el inventario completo con lo que traiga el archivo: actualiza los artículos que ya existen (sin tocar su sede ni los ajustes manuales de mínimo/máximo), agrega los nuevos, y elimina los que ya no aparezcan — pensada para subir todos los días el reporte completo de SAP, no un incremento.
+      ℹ️ Esta pantalla reemplaza el inventario de cada sede con lo que traiga su archivo: actualiza los artículos que ya existen en esa sede (sin tocar los ajustes manuales de mínimo/máximo), agrega los nuevos, y elimina los que ya no aparezcan — pero <b>solo para la o las sedes que efectivamente subas esta vez</b>. Si hoy solo subes el archivo de una sede, la otra queda exactamente como estaba.
     </div>
     <div class="card">
-      <h3>1. Selecciona el archivo Excel</h3>
-      <div class="drop">
-        📄 Arrastra o selecciona el archivo exportado de SAP (.xlsx)
-        <br><input type="file" id="f-archivo" accept=".xlsx,.xls">
+      <h3>1. Selecciona los archivos por sede</h3>
+      <div style="font-size:12px;color:#777;margin-bottom:10px">
+        Cada sede tiene su propio inventario. Puedes subir el archivo de cada una en su casilla (si hoy solo tienes lista una sede, sube solo esa — la otra no se toca). Si un mismo archivo ya trae las dos sedes, súbelo en cualquiera de las dos casillas: si trae una columna de "Nombre de almacén" (como el reporte completo de SAP), o si tiene una hoja llamada "Chigorodó" y otra "Belén de Bajirá" (o similar), el sistema reconoce la sede real de cada fila automáticamente.
       </div>
+      <div class="slots">
+        ${SEDES.map(sede => `
+          <div class="slot">
+            <div class="drop">
+              📄 <b>${sede}</b>
+              ${archivosPorSede[sede] ? `
+                <div class="cargado">${archivosPorSede[sede].nombreArchivo}<br>${archivosPorSede[sede].filas.length} filas detectadas${archivosPorSede[sede].modoHojasPorSede ? ' (hojas por sede)' : ''}${archivosPorSede[sede].tieneColumnaAlmacen ? ' (columna de almacén)' : ''}</div>
+                <button class="btn-x" data-quitar-slot="${sede}">🗑 Quitar</button>
+              ` : `<br><input type="file" class="f-archivo-slot" data-sede="${sede}" accept=".xlsx,.xls">`}
+            </div>
+          </div>
+        `).join('')}
+      </div>
+      ${descartadosAlmacen ? `<div style="font-size:11.5px;color:#999;margin-top:10px">ℹ️ ${descartadosAlmacen} filas se descartaron por pertenecer a un almacén que no es Chigorodó ni Belén de Bajirá (planta, viveros, semillas, etc.).</div>` : ''}
       ${mensajeResultado}
     </div>
-    ${filas.length ? `
+    ${combinadas.length ? `
     <div class="card">
-      <h3>2. Grupos detectados en el archivo (${filas.length} artículos)</h3>
+      <h3>2. Grupos detectados en los archivos (${combinadas.length} filas)</h3>
       <div style="font-size:12px;color:#777;margin-bottom:6px">Marca los que NO son de Agrotienda (ej. de otro negocio que comparte el mismo SAP) — quedan excluidos de esta carga y de las siguientes, no hay que repetirlo cada día.</div>
       ${prefijosOrdenados.map(p => `
         <div class="grp-row">
@@ -242,14 +403,15 @@ function render() {
       ${!puedeAdministrarExcluidos ? '<div style="font-size:11px;color:#999;margin-top:8px">Solo Carlos, Diego o Alejandra pueden cambiar qué grupos se excluyen.</div>' : ''}
     </div>
     <div class="card">
-      <h3>3. Vista previa de lo que se va a cargar (${filasIncluidas.length} artículos)</h3>
+      <h3>3. Vista previa de lo que se va a cargar (${filasIncluidas.length} artículos × sede)</h3>
+      ${duplicados ? `<div class="msg aviso-dup">⚠️ ${duplicados} productos aparecieron repetidos (mismo código y misma sede) dentro de los archivos cargados — se sumó su cantidad automáticamente. Si esto no es lo que esperabas (por ejemplo, subiste el mismo archivo en las dos casillas por error), usa "🗑 Quitar" arriba y vuelve a intentar.</div>` : ''}
       <table>
         <thead><tr>${cols.map(c => `<th>${c}</th>`).join('')}</tr></thead>
         <tbody>
           ${preview.map(f => `<tr>${cols.map(c => `<td>${f[c] ?? '—'}</td>`).join('')}</tr>`).join('')}
         </tbody>
       </table>
-      <button class="btn" id="btn-confirmar" style="margin-top:14px" ${filasIncluidas.length ? '' : 'disabled'}>✅ Confirmar y cargar ${filasIncluidas.length} artículos</button>
+      <button class="btn" id="btn-confirmar" style="margin-top:14px" ${filasIncluidas.length ? '' : 'disabled'}>✅ Confirmar y cargar ${filasIncluidas.length} artículos × sede</button>
       <button class="btn btn-sec" id="btn-cancelar" style="margin-top:14px">Cancelar</button>
     </div>` : ''}
     <div class="card">
@@ -301,44 +463,41 @@ async function cargarExcluidos() {
   checkboxExcluir = new Set(excluidos.keys());
 }
 
-function bind() {
-  document.getElementById('f-archivo')?.addEventListener('change', async (e) => {
-    const file = e.target.files[0];
-    if (!file) return;
-    mensajeResultado = '';
-    const buf = await file.arrayBuffer();
-    const wb = XLSX.read(buf, { type: 'array' });
-    const hoja = wb.Sheets[wb.SheetNames[0]];
-    const json = XLSX.utils.sheet_to_json(hoja, { defval: null });
-    if (!json.length) { alert('El archivo no tiene filas.'); return; }
-
-    const headers = Object.keys(json[0]);
-    const mapa = mapaColumnas(headers);
-    if (!mapa.codigo_sap || !mapa.producto) {
-      alert('No se encontró una columna de código de artículo y/o descripción. Revisa que el archivo tenga esos datos.');
+async function manejarArchivoSlot(sede, file) {
+  if (!file) return;
+  mensajeResultado = '';
+  try {
+    const resultado = await procesarArchivo(file, sede);
+    if (!resultado.filas.length) {
+      alert(`No se encontraron filas válidas (con código y descripción) en el archivo de ${sede}.`);
       return;
     }
-
-    filas = json.map(row => {
-      const codigo_sap = String(row[mapa.codigo_sap] || '').trim();
-      const producto = String(row[mapa.producto] || '').trim();
-      const cantidad = mapa.cantidad ? Number(row[mapa.cantidad]) || 0 : 0;
-      const valor_total = mapa.valor_total ? Number(row[mapa.valor_total]) || null : null;
-      let costo_unit = mapa.costo_unit ? Number(row[mapa.costo_unit]) || null : null;
-      if (costo_unit === null && valor_total !== null && cantidad) {
-        costo_unit = Math.round((valor_total / cantidad) * 10000) / 10000;
-      }
-      const categoria = mapa.categoria ? String(row[mapa.categoria] || '').trim() || null : categoriaPorPrefijo(codigo_sap);
-      const proveedor = mapa.proveedor ? String(row[mapa.proveedor] || '').trim() || null : null;
-      const unidad = mapa.unidad ? String(row[mapa.unidad] || '').trim() || null : null;
-      return { codigo_sap, producto, categoria, proveedor, unidad, cantidad, costo_unit, valor_total };
-    }).filter(f => f.codigo_sap && f.producto);
-
-    // Al detectar un archivo nuevo, se parte de los grupos ya excluidos
-    // en la base — si el archivo trae un grupo nuevo que no está en esa
-    // lista, aparece sin marcar (incluido) hasta que alguien lo excluya.
+    archivosPorSede[sede] = { nombreArchivo: file.name, ...resultado };
+    // Al detectar un archivo nuevo, se parte de los grupos ya excluidos en la
+    // base — si trae un grupo nuevo que no está en esa lista, aparece sin
+    // marcar (incluido) hasta que alguien lo excluya.
     checkboxExcluir = new Set(excluidos.keys());
     render();
+  } catch (e) {
+    alert('No se pudo leer el archivo: ' + e.message);
+  }
+}
+
+function bind() {
+  document.querySelectorAll('.f-archivo-slot').forEach(inp => {
+    inp.addEventListener('change', (e) => {
+      const sede = inp.dataset.sede;
+      const file = e.target.files[0];
+      manejarArchivoSlot(sede, file);
+    });
+  });
+
+  document.querySelectorAll('[data-quitar-slot]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      archivosPorSede[btn.dataset.quitarSlot] = null;
+      mensajeResultado = '';
+      render();
+    });
   });
 
   // Marcar/desmarcar un grupo aquí lo excluye (o lo vuelve a incluir) de
@@ -372,7 +531,7 @@ function bind() {
   });
 
   document.getElementById('btn-cancelar')?.addEventListener('click', () => {
-    filas = [];
+    archivosPorSede = { 'Chigorodó': null, 'Belén de Bajirá': null };
     mensajeResultado = '';
     render();
   });
@@ -381,8 +540,8 @@ function bind() {
     const btn = document.getElementById('btn-confirmar');
     btn.disabled = true;
     btn.textContent = 'Cargando...';
-    const filasAEnviar = filas.filter(f => !estaExcluido(f.codigo_sap, checkboxExcluir));
-    const omitidos = filas.length - filasAEnviar.length;
+    const totalArchivo = filasCombinadas().length;
+    const omitidos = totalArchivo - filasParaEnviar.length; // excluidos por grupo o colapsados como duplicados
     try {
       const resp = await fetch('/api/cargar-inventario', {
         method: 'POST',
@@ -390,7 +549,7 @@ function bind() {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${sesionActual.access_token}`,
         },
-        body: JSON.stringify({ articulos: filasAEnviar }),
+        body: JSON.stringify({ articulos: filasParaEnviar }),
       });
       const data = await resp.json();
       if (!resp.ok) {
@@ -402,9 +561,9 @@ function bind() {
             <span class="chip-r">${data.actualizados} actualizados</span>
             <span class="chip-r elim">${data.eliminados} eliminados</span>
           </div>
-          <div class="msg ok">✅ Inventario actualizado correctamente (${data.total} artículos procesados)${omitidos ? `, ${omitidos} omitidos por ser de grupos excluidos` : ''}.</div>
+          <div class="msg ok">✅ Inventario de ${(data.sedes || []).join(' y ')} actualizado correctamente (${data.total} artículo × sede procesados)${omitidos ? `, ${omitidos} filas omitidas (grupo excluido o duplicado ya sumado)` : ''}.</div>
         `;
-        filas = [];
+        archivosPorSede = { 'Chigorodó': null, 'Belén de Bajirá': null };
       }
     } catch (e) {
       mensajeResultado = `<div class="msg err">❌ Error de red: ${e.message}</div>`;

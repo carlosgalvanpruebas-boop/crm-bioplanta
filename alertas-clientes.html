@@ -1,0 +1,351 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Agrotienda Bioplanta · Alertas de clientes</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+:root{--v1:#33513a;--v2:#4f7c5a;--v3:#84a38c;--v4:#a9c2af;--vbg:#eaefeb;--vlt:#f4f8f5;--texto:#1a2e1a;--beige:#e6ceab;--vino:#984745}
+body{font-family:'Segoe UI',system-ui,sans-serif;background:#f0f4f0;color:var(--texto);min-height:100vh}
+.header{background:linear-gradient(135deg,var(--v1),var(--v2));color:#fff;padding:16px 20px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;box-shadow:0 2px 12px rgba(0,0,0,.2)}
+.hdr-l{display:flex;align-items:center;gap:10px}
+.logo-ico{font-size:26px}
+.brand{font-size:15px;font-weight:800}
+.brand-sub{font-size:11px;opacity:.8}
+.hdr-r{display:flex;gap:8px}
+.btn-h{background:rgba(255,255,255,.15);border:1px solid rgba(255,255,255,.3);color:#fff;padding:7px 16px;border-radius:20px;font-size:12px;cursor:pointer;font-family:inherit;text-decoration:none}
+
+.wrap{max-width:1150px;margin:0 auto;padding:18px 18px 60px}
+.loading{text-align:center;padding:80px;color:#888}
+
+.aviso{background:var(--beige);color:var(--v1);border-radius:10px;padding:12px 16px;font-size:12.5px;margin-bottom:16px;line-height:1.5}
+
+.indicadores{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:12px;margin-bottom:18px}
+.ind{background:#fff;border-radius:14px;padding:14px 16px;box-shadow:0 2px 10px rgba(0,0,0,.06)}
+.ind b{display:block;font-size:22px;font-weight:800;color:var(--v1)}
+.ind span{font-size:11.5px;color:#777}
+
+.filtros{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px;align-items:center}
+.filtros select,.filtros input{border:1.5px solid #d6e2d9;border-radius:8px;padding:8px 10px;font-size:12.5px;font-family:inherit}
+.filtros input{flex:1;min-width:180px}
+.btn-exp{background:var(--v2);color:#fff;border:none;border-radius:8px;padding:8px 14px;font-size:12.5px;font-weight:700;cursor:pointer;font-family:inherit;white-space:nowrap}
+
+.card-cliente{background:#fff;border-radius:16px;padding:16px 20px;box-shadow:0 2px 10px rgba(0,0,0,.07);margin-bottom:14px}
+.cc-top{display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:8px;margin-bottom:10px;padding-bottom:10px;border-bottom:1px solid var(--vbg)}
+.cc-nom{font-size:15px;font-weight:800;color:var(--v1)}
+.cc-meta{font-size:11.5px;color:#888;margin-top:2px}
+.cc-badge{font-size:11px;font-weight:800;background:var(--vino-lt,#f3e8e7);color:var(--vino);padding:3px 10px;border-radius:10px;white-space:nowrap}
+
+.prod-row{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:9px 0;border-bottom:1px solid var(--vbg);flex-wrap:wrap}
+.prod-row:last-child{border-bottom:none}
+.pr-nom{font-size:13px;font-weight:700;color:var(--texto)}
+.pr-cat{font-size:10.5px;color:var(--v2);font-weight:600}
+.pr-datos{display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end}
+.dato{font-size:11px;color:var(--v2);background:var(--vlt);padding:3px 9px;border-radius:12px;white-space:nowrap}
+.dato.alerta{color:var(--vino);background:#fde3e2;font-weight:700}
+
+.vacio{text-align:center;padding:50px;color:#999;font-size:13px}
+.sec-t{font-size:13px;font-weight:800;text-transform:uppercase;letter-spacing:1px;color:var(--v2);margin:20px 0 12px}
+
+@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
+:root{--vlt:#faf8f4;--gris:#f6f4f0;--texto:#25281f;--beige-lt:#f6ecdd;--vino-lt:#f3e8e7}
+html,body{font-family:'Plus Jakarta Sans',Inter,'Segoe UI',system-ui,sans-serif;-webkit-font-smoothing:antialiased;background:var(--vlt)}
+button,input,select,textarea{font-family:inherit}
+h1,h2,h3{font-weight:800;letter-spacing:-.015em;line-height:1.2;color:var(--v1)}
+body,p,td,th,li,label{line-height:1.5}
+.brand,.sec-t{font-weight:700;letter-spacing:-.005em}
+.brand-sub{color:var(--v2);font-weight:500}
+.card-cliente,.ind{border-radius:14px;border:1px solid #e6e1d6;box-shadow:0 2px 10px rgba(37,40,31,.06)}
+button,.btn-h,.btn-exp,input,select,textarea{border-radius:10px}
+.btn-h,.btn-exp{font-weight:600;letter-spacing:.01em;transition:transform .12s,box-shadow .12s,background .12s,filter .12s}
+.btn-h:hover,.btn-exp:hover{transform:translateY(-1px);box-shadow:0 4px 10px rgba(37,40,31,.16);filter:brightness(1.05)}
+a:focus-visible,button:focus-visible,.btn-h:focus-visible,.btn-exp:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible{outline:2px solid var(--v2);outline-offset:2px}
+@media(prefers-reduced-motion:reduce){*{transition-duration:.001ms!important;animation-duration:.001ms!important}}
+
+@media (max-width:640px){
+  .wrap{padding:14px 12px 48px}
+  .header{padding:13px 14px}
+  .brand{font-size:14px}
+  .card-cliente{padding:14px 14px}
+}
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div class="hdr-l">
+    <div class="logo-ico">🔔</div>
+    <div>
+      <div class="brand">Alertas de clientes</div>
+      <div class="brand-sub">Fertilizantes e insumos que dejaron de comprar · Administrativo (2.10)</div>
+    </div>
+  </div>
+  <div class="hdr-r">
+    <a class="btn-h" href="hub.html">← Hub</a>
+  </div>
+</div>
+
+<div class="wrap" id="wrap">
+  <div class="loading">Cargando...</div>
+</div>
+
+<script>
+const SUPABASE_URL = 'https://fpqogvxssnoarzgxcitc.supabase.co';
+const SUPABASE_KEY = 'sb_publishable_ccZF-8tenblFEah5lXfd3w_mYTHMtMC';
+const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+// Categorías de inventario (de los 22 grupos reales de SAP, ver
+// esquema-supabase.md) que cuentan como "fertilizante/insumo
+// agropecuario" para este reporte — Carlos pidió explícitamente dejar
+// fuera veterinaria, mascotas, herramientas, repuestos, EPP, etc.
+// Si falta o sobra alguna categoría aquí, es un ajuste de una sola
+// línea (avísale a Claude).
+const CATEGORIAS_INSUMO = new Set([
+  'FERTILIZANTES', 'FERTILIZANTES FOLIARES', 'HERBICIDAS', 'INSECTICIDAS',
+  'FUNGICIDAS', 'COAYUDANTES', 'POLINIZACION', 'BIOLOGICOS',
+]);
+
+let alertasPorCliente = [];
+let sedeSel = 'todas';
+let umbralSel = 1.6;
+let minComprasSel = 2;
+let textoBusqueda = '';
+
+function fmtFecha(iso) {
+  if (!iso) return '—';
+  return new Date(iso + 'T00:00:00').toLocaleDateString('es-CO', { day: '2-digit', month: 'short', year: 'numeric' });
+}
+function fmtDias(n) {
+  return Math.round(n) + (Math.round(n) === 1 ? ' día' : ' días');
+}
+
+// Trae TODAS las filas de una tabla, paginando de a 1000 (límite por
+// defecto de PostgREST) — mismo patrón usado en gerencia-ventas.html.
+async function traerTodo(tabla, columnas) {
+  let desde = 0, filas = [];
+  const PAGINA = 1000;
+  while (true) {
+    const { data, error } = await sb.from(tabla).select(columnas).range(desde, desde + PAGINA - 1);
+    if (error) throw error;
+    if (!data || !data.length) break;
+    filas = filas.concat(data);
+    if (data.length < PAGINA) break;
+    desde += PAGINA;
+  }
+  return filas;
+}
+
+function calcularAlertas(ventas, mapaCategoria, umbral, minCompras) {
+  // Agrupa por cliente + artículo exacto (mismo criterio que pidió
+  // Carlos: "los clientes normalmente compran lo mismo" — si dejan de
+  // repetir un producto puntual, puede ser que cambiaron de proveedor
+  // para ESE insumo aunque sigan comprando otras cosas).
+  const grupos = new Map();
+  for (const v of ventas) {
+    const categoria = mapaCategoria.get(v.codigo_sap);
+    if (!categoria || !CATEGORIAS_INSUMO.has(categoria)) continue;
+    if (!v.fecha || !v.codigo_sap) continue;
+    const clienteKey = (v.cliente_nit && v.cliente_nit.trim()) || (v.cliente && v.cliente.trim()) || null;
+    if (!clienteKey) continue;
+    const key = clienteKey + '||' + v.codigo_sap;
+    if (!grupos.has(key)) {
+      grupos.set(key, {
+        clienteKey, cliente: v.cliente || clienteKey, codigo_sap: v.codigo_sap,
+        producto: v.producto, categoria, sedes: new Set(), fechas: [],
+      });
+    }
+    const g = grupos.get(key);
+    g.fechas.push(v.fecha);
+    if (v.sede) g.sedes.add(v.sede);
+    if (v.producto) g.producto = v.producto; // se queda con el nombre más reciente
+  }
+
+  const hoy = new Date();
+  const alertas = [];
+  for (const g of grupos.values()) {
+    const fechas = [...new Set(g.fechas)].sort();
+    if (fechas.length < minCompras) continue;
+    const dias = fechas.map(f => new Date(f + 'T00:00:00'));
+    const intervalos = [];
+    for (let i = 1; i < dias.length; i++) {
+      intervalos.push((dias[i] - dias[i - 1]) / 86400000);
+    }
+    const promedio = intervalos.reduce((a, b) => a + b, 0) / intervalos.length;
+    const ultima = dias[dias.length - 1];
+    const diasDesdeUltima = (hoy - ultima) / 86400000;
+    if (promedio <= 0) continue;
+    const ratio = diasDesdeUltima / promedio;
+    // Piso de 20 días para no generar ruido con productos de compra
+    // casi diaria/semanal donde 1.6x el promedio son solo unos días.
+    if (ratio >= umbral && diasDesdeUltima >= 20) {
+      alertas.push({
+        ...g,
+        sede: [...g.sedes].join(' / ') || '—',
+        nCompras: fechas.length,
+        promedioDias: promedio,
+        diasDesdeUltima,
+        ratio,
+        ultimaFecha: g_fechaISO(ultima),
+      });
+    }
+  }
+  return alertas;
+}
+function g_fechaISO(d) {
+  return d.toISOString().slice(0, 10);
+}
+
+function aplicarFiltros() {
+  let lista = alertasPorCliente;
+  if (sedeSel !== 'todas') lista = lista.filter(a => a.sede.includes(sedeSel));
+  if (textoBusqueda.trim()) {
+    const t = textoBusqueda.trim().toLowerCase();
+    lista = lista.filter(a => (a.cliente || '').toLowerCase().includes(t) || (a.clienteKey || '').toLowerCase().includes(t));
+  }
+  return lista;
+}
+
+function agruparPorCliente(alertas) {
+  const porCliente = new Map();
+  for (const a of alertas) {
+    if (!porCliente.has(a.clienteKey)) porCliente.set(a.clienteKey, { cliente: a.cliente, clienteKey: a.clienteKey, sede: a.sede, items: [] });
+    const c = porCliente.get(a.clienteKey);
+    c.items.push(a);
+    if (a.sede !== '—') c.sede = a.sede;
+  }
+  const lista = [...porCliente.values()];
+  lista.forEach(c => c.items.sort((x, y) => y.ratio - x.ratio));
+  lista.sort((x, y) => Math.max(...y.items.map(i => i.ratio)) - Math.max(...x.items.map(i => i.ratio)));
+  return lista;
+}
+
+function exportarCSV(alertas) {
+  const encabezados = ['Cliente', 'NIT/Cliente', 'Sede', 'Producto', 'Categoría', 'Compras previas', 'Cada cuántos días compra', 'Días sin comprar', 'Última compra'];
+  const filas = alertas.map(a => [
+    a.cliente, a.clienteKey, a.sede, a.producto, a.categoria, a.nCompras,
+    Math.round(a.promedioDias), Math.round(a.diasDesdeUltima), a.ultimaFecha,
+  ]);
+  const csv = [encabezados, ...filas].map(f => f.map(v => `"${String(v ?? '').replace(/"/g, '""')}"`).join(',')).join('\n');
+  const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `alertas_clientes_${new Date().toISOString().slice(0, 10)}.csv`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+function render() {
+  const filtradas = aplicarFiltros();
+  const porCliente = agruparPorCliente(filtradas);
+  const clientesHtml = porCliente.length ? porCliente.map(c => `
+    <div class="card-cliente">
+      <div class="cc-top">
+        <div>
+          <div class="cc-nom">${c.cliente}</div>
+          <div class="cc-meta">${c.sede} · ${c.items.length} producto${c.items.length === 1 ? '' : 's'} en alerta</div>
+        </div>
+      </div>
+      ${c.items.map(a => `
+        <div class="prod-row">
+          <div>
+            <div class="pr-nom">${a.producto || a.codigo_sap}</div>
+            <div class="pr-cat">${a.categoria} · ${a.codigo_sap}</div>
+          </div>
+          <div class="pr-datos">
+            <span class="dato">Compraba cada ~${fmtDias(a.promedioDias)}</span>
+            <span class="dato alerta">${fmtDias(a.diasDesdeUltima)} sin comprar</span>
+            <span class="dato">Última: ${fmtFecha(a.ultimaFecha)}</span>
+            <span class="dato">${a.nCompras} compras previas</span>
+          </div>
+        </div>
+      `).join('')}
+    </div>
+  `).join('') : '<div class="vacio">No hay alertas con estos filtros. 🎉</div>';
+
+  document.getElementById('wrap').innerHTML = `
+    <div class="aviso">
+      🔔 Se compara, para cada cliente y cada producto de fertilizantes/insumos agropecuarios que haya comprado al menos ${minComprasSel} veces, su ritmo habitual de recompra contra cuánto lleva sin volver a comprar ese mismo producto — si lleva más de ${umbralSel}× su intervalo habitual (y al menos 20 días), se marca como alerta. No mira productos con una sola compra (no hay patrón que comparar) ni categorías fuera de agroinsumos (veterinaria, herramientas, mascotas, etc.).
+    </div>
+    <div class="indicadores">
+      <div class="ind"><b>${filtradas.length}</b><span>Alertas activas</span></div>
+      <div class="ind"><b>${porCliente.length}</b><span>Clientes afectados</span></div>
+    </div>
+    <div class="filtros">
+      <select onchange="sedeSel=this.value; render()">
+        <option value="todas" ${sedeSel==='todas'?'selected':''}>Todas las sedes</option>
+        <option value="Chigorodó" ${sedeSel==='Chigorodó'?'selected':''}>Chigorodó</option>
+        <option value="Belén de Bajirá" ${sedeSel==='Belén de Bajirá'?'selected':''}>Belén de Bajirá</option>
+      </select>
+      <select onchange="umbralSel=Number(this.value); recalcular()">
+        <option value="1.3" ${umbralSel===1.3?'selected':''}>Sensible (1.3×)</option>
+        <option value="1.6" ${umbralSel===1.6?'selected':''}>Recomendado (1.6×)</option>
+        <option value="2" ${umbralSel===2?'selected':''}>Conservador (2×)</option>
+        <option value="2.5" ${umbralSel===2.5?'selected':''}>Muy conservador (2.5×)</option>
+      </select>
+      <select onchange="minComprasSel=Number(this.value); recalcular()">
+        <option value="2" ${minComprasSel===2?'selected':''}>Desde 2 compras previas</option>
+        <option value="3" ${minComprasSel===3?'selected':''}>Desde 3 compras previas (más confiable)</option>
+      </select>
+      <input type="text" placeholder="Buscar cliente..." value="${textoBusqueda}" oninput="textoBusqueda=this.value; render()">
+      <button class="btn-exp" onclick="exportarCSV(aplicarFiltros())">⬇️ Exportar CSV</button>
+    </div>
+    ${clientesHtml}
+  `;
+}
+
+let ventasCache = null;
+let mapaCategoriaCache = null;
+function recalcular() {
+  alertasPorCliente = calcularAlertas(ventasCache, mapaCategoriaCache, umbralSel, minComprasSel);
+  render();
+}
+
+(async () => {
+  const { data: { session } } = await sb.auth.getSession();
+  if (!session) { window.location.href = 'login.html'; return; }
+
+  const userId = session.user.id;
+  const [{ data: perfil }, { data: permisos }] = await Promise.all([
+    sb.from('perfiles').select('*').eq('id', userId).single(),
+    sb.from('permisos_modulo').select('*').eq('perfil_id', userId),
+  ]);
+
+  if (!perfil) {
+    document.getElementById('wrap').innerHTML = '<div class="loading">Tu usuario no tiene un perfil configurado todavía.</div>';
+    return;
+  }
+
+  const esSuperAdmin = perfil.es_super_admin;
+  const permiso2 = (permisos || []).find(p => p.modulo === 2);
+  const nivel2 = permiso2?.nivel || 'inactivo';
+  const subs2 = permiso2?.submodulos_parciales || [];
+  const puedeVer = esSuperAdmin || nivel2 === 'completo' || (nivel2 === 'parcial' && subs2.includes('2.10'));
+
+  if (!puedeVer) {
+    document.getElementById('wrap').innerHTML = '<div class="loading">No tienes permiso para ver este módulo.</div>';
+    return;
+  }
+
+  try {
+    const [ventas, inventario] = await Promise.all([
+      traerTodo('ventas', 'cliente,cliente_nit,codigo_sap,producto,fecha,sede,valor'),
+      traerTodo('inventario', 'codigo_sap,categoria'),
+    ]);
+    const mapaCategoria = new Map();
+    inventario.forEach(i => { if (i.codigo_sap && i.categoria) mapaCategoria.set(i.codigo_sap, i.categoria); });
+
+    ventasCache = ventas;
+    mapaCategoriaCache = mapaCategoria;
+    alertasPorCliente = calcularAlertas(ventas, mapaCategoria, umbralSel, minComprasSel);
+    render();
+  } catch (e) {
+    document.getElementById('wrap').innerHTML = '<div class="loading">No se pudo calcular las alertas: ' + e.message + '</div>';
+  }
+})();
+</script>
+
+</body>
+</html>

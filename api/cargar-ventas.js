@@ -213,7 +213,19 @@ module.exports = async (req, res) => {
         sede: f.sede ? String(f.sede).trim() : null,
         forma_pago: formaPagoDe(fechaContab, fechaVenc),
       };
-      limpiasMap.set(`${factura}||${codigo_sap}`, fila);
+      // Defensa adicional: si dos líneas del mismo lote comparten la misma
+      // clave (factura + codigo_sap) — normalmente ya no debería pasar,
+      // porque el navegador las suma antes de enviar (19-sep-2026) — se
+      // suman aquí también en vez de sobrescribir, para no perder en
+      // silencio el valor de ninguna de las dos líneas.
+      const clave = `${factura}||${codigo_sap}`;
+      const existente = limpiasMap.get(clave);
+      if (existente) {
+        existente.cantidad = (Number(existente.cantidad) || 0) + (Number(fila.cantidad) || 0);
+        existente.valor = (Number(existente.valor) || 0) + (Number(fila.valor) || 0);
+      } else {
+        limpiasMap.set(clave, fila);
+      }
     }
 
     const limpios = [...limpiasMap.values()];

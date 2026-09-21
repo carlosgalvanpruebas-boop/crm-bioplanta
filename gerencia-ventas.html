@@ -113,11 +113,11 @@ const SEDES = ['Chigorodó', 'Belén de Bajirá'];
 // ("Cumplimiento de presupuesto por sede" y "Punto de equilibrio") — esas
 // siguen usando `presupuesto_venta` tal cual. Si el año cambia o Carlos
 // actualiza estos montos, hay que editar este objeto.
-// Fase 43 (21-sep-2026, corrección de Carlos): esta meta general es SOLO
-// para venta a crédito — el contado no cuenta aquí (se mide aparte, por
-// sede, en "Cumplimiento de presupuesto por sede" y "Punto de equilibrio").
-// Antes (16-sep) se comparaba contra la venta total (contado+crédito), lo
-// que inflaba el cumplimiento sumando ventas que ya se miden en otro lado.
+// Fase 43 (21-sep-2026): se probó comparar esta meta general solo contra
+// venta a crédito (restando el contado, que se mide aparte por sede).
+// Fase 44 (21-sep-2026, corrección de Carlos, mismo día): vuelve a ser
+// venta TOTAL (contado+crédito) — Carlos quiere ver el cumplimiento en
+// términos generales de toda la agrotienda, no solo el crédito.
 const METAS_2026 = {
   1: 400000000, 2: 550000000, 3: 550000000, 4: 800000000,
   5: 750000000, 6: 500000000, 7: 550000000, 8: 850000000,
@@ -269,10 +269,11 @@ function tablaMensual(todasVentas, meses) {
     const ultimoDia = new Date(anio, mes, 0).getDate();
     const hasta = `${anio}-${String(mes).padStart(2, '0')}-${String(ultimoDia).padStart(2, '0')}`;
     const porSede = statsPorSede(filtrarPorRango(todasVentas, desde, hasta));
-    // Fase 43 (21-sep): la meta general (METAS_2026) es solo para venta a
-    // crédito — se resta el contado de cada sede, no se suma. Antes esto
-    // era la venta total (contado+crédito); corregido a pedido de Carlos.
-    const totalGeneral = SEDES.reduce((acc, s) => acc + (porSede[s].total - porSede[s].contado), 0);
+    // Fase 44 (21-sep): vuelve a ser venta TOTAL (contado+crédito) de cada
+    // sede — la Fase 43 (mismo día) había restado el contado, pero Carlos
+    // pidió totalizar de nuevo para ver el cumplimiento en términos
+    // generales, no solo la venta a crédito.
+    const totalGeneral = SEDES.reduce((acc, s) => acc + porSede[s].total, 0);
     // Meta general del mes (no por sede) — ver METAS_2026.
     const meta = METAS_2026[mes] || 0;
     const pctCumplimiento = meta ? Math.round((totalGeneral / meta) * 1000) / 10 : null;
@@ -400,11 +401,10 @@ function render() {
   const meses = mesesDelAnio();
   const filas = tablaMensual(ventas, meses);
   // Totales del año a la fecha, para la fila final de la tabla (punto 5).
-  // Fase 43 (21-sep): igual que en tablaMensual, se resta el contado de
-  // cada sede — esta tabla completa (incluida cada fila mensual) mide
-  // solo venta a crédito contra la meta general.
-  const totalAnioChigorodo = filas.reduce((acc, f) => acc + (f.porSede['Chigorodó'].total - f.porSede['Chigorodó'].contado), 0);
-  const totalAnioBajira = filas.reduce((acc, f) => acc + (f.porSede['Belén de Bajirá'].total - f.porSede['Belén de Bajirá'].contado), 0);
+  // Fase 44 (21-sep): vuelve a sumar venta total (contado+crédito) por
+  // sede — ver nota de Fase 44 en tablaMensual().
+  const totalAnioChigorodo = filas.reduce((acc, f) => acc + f.porSede['Chigorodó'].total, 0);
+  const totalAnioBajira = filas.reduce((acc, f) => acc + f.porSede['Belén de Bajirá'].total, 0);
   const totalAnioGeneral = totalAnioChigorodo + totalAnioBajira;
   const totalAnioMeta = filas.reduce((acc, f) => acc + f.meta, 0);
   const pctAnio = totalAnioMeta ? Math.round((totalAnioGeneral / totalAnioMeta) * 1000) / 10 : null;
@@ -473,16 +473,30 @@ function render() {
 
     <div class="card">
       <h3>🎯 Cumplimiento de presupuesto por sede</h3>
-      <div class="sub">${etiquetaRango} — la meta mensual se prorratea a los días del rango elegido arriba. Se mide solo con ventas de contado; el crédito no cuenta para la meta de la sede.</div>
+      <div class="sub">${etiquetaRango} — ${filtroRango === 'mes' ? 'se compara contra el presupuesto completo del mes (sin prorratear a los días transcurridos)' : 'la meta se prorratea a los días del período elegido arriba'}. Se mide solo con ventas de contado; el crédito no cuenta para la meta de la sede.</div>
       <div class="presu-grid">
         ${SEDES.map(sede => {
           // La meta de cada sede se mide solo contra contado — el crédito
           // no cuenta para el cumplimiento de la sede (es utilidad de los
           // dueños). El total contado+crédito solo se usa en 1.3, a nivel
-          // de toda la agrotienda. La meta mensual se prorratea día a día
-          // al rango elegido arriba (si el rango cruza meses, cada día usa
-          // la meta de su propio mes).
-          const { total: meta, faltan } = prorratearPorDia(sede, desde, hasta, 'monto');
+          // de toda la agrotienda.
+          // Fase 44 (21-sep, a pedido de Carlos): en la vista por defecto
+          // ("Este mes"), NO se prorratea la meta a los días transcurridos
+          // — se compara contra el presupuesto completo del mes, para ver
+          // cuánto del mes completo se lleva vendido. Si se elige un
+          // período específico (hoy, ayer, esta semana, otro mes, rango
+          // personalizado), ahí sí se prorratea la meta a los días de ese
+          // período puntual (si el rango cruza meses, cada día usa la
+          // meta de su propio mes).
+          let meta, faltan;
+          if (filtroRango === 'mes') {
+            const [anioMeta, mesMeta] = desde.split('-').map(Number);
+            const filaMeta = presupuestoTodo[sede]?.[`${anioMeta}-${mesMeta}`];
+            meta = filaMeta ? filaMeta.monto : 0;
+            faltan = !filaMeta;
+          } else {
+            ({ total: meta, faltan } = prorratearPorDia(sede, desde, hasta, 'monto'));
+          }
           const vendido = porSede[sede].contado;
           const pct = meta ? Math.round((vendido / meta) * 1000) / 10 : null;
           return `
@@ -531,15 +545,15 @@ function render() {
 
     <div class="card">
       <h3>🎯 Cumplimiento de presupuesto</h3>
-      <div class="sub">Año en curso, de enero al mes actual — venta a crédito (se resta el contado, que se mide aparte por sede) vs. meta general del mes</div>
+      <div class="sub">Año en curso, de enero al mes actual — venta total (contado + crédito) vs. meta general del mes</div>
       <table>
-        <thead><tr><th>Mes</th><th class="num">Chigorodó (crédito)</th><th class="num">Belén de Bajirá (crédito)</th><th class="num">Total (crédito)</th><th class="num">Meta</th><th class="num">% Cumplimiento</th></tr></thead>
+        <thead><tr><th>Mes</th><th class="num">Chigorodó</th><th class="num">Belén de Bajirá</th><th class="num">Total</th><th class="num">Meta</th><th class="num">% Cumplimiento</th></tr></thead>
         <tbody>
           ${filas.map(f => `
             <tr>
               <td class="${f.esActual ? 'mes-actual' : ''}">${f.etiqueta}${f.esActual ? ' (en curso)' : ''}</td>
-              <td class="num">${fmtMoneda(f.porSede['Chigorodó'].total - f.porSede['Chigorodó'].contado)}</td>
-              <td class="num">${fmtMoneda(f.porSede['Belén de Bajirá'].total - f.porSede['Belén de Bajirá'].contado)}</td>
+              <td class="num">${fmtMoneda(f.porSede['Chigorodó'].total)}</td>
+              <td class="num">${fmtMoneda(f.porSede['Belén de Bajirá'].total)}</td>
               <td class="num"><b>${fmtMoneda(f.totalGeneral)}</b></td>
               <td class="num">${f.meta ? fmtMoneda(f.meta) : '—'}</td>
               <td class="num">${f.pctCumplimiento == null ? '—' : `${f.pctCumplimiento}%`}</td>

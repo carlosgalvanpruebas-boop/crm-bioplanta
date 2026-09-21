@@ -198,6 +198,19 @@ function renderPublico(icono, nombre, href, desc) {
   `;
 }
 
+function renderComercial(icono, nombre, href, desc) {
+  return `
+    <a class="grp" style="text-decoration:none;color:inherit;display:block" href="${href}">
+      <div class="grp-top">
+        <div class="grp-ico">${icono}</div>
+        <div class="grp-tag tag-completo">Activo</div>
+      </div>
+      <div class="grp-nom">${nombre}</div>
+      <div class="sub-list"><div class="sub-item"><span>${desc}</span><span class="badge-count" data-badge="neg" style="display:none"></span></div></div>
+    </a>
+  `;
+}
+
 function pintarBadge(id, count) {
   if (!count) return;
   const el = document.querySelector(`[data-badge="${id}"]`);
@@ -253,6 +266,14 @@ async function cargarBadges(userId, perfil, nivel2) {
       pintarBadge('2.2', count);
     } catch (e) {}
   }
+
+  // Negociaciones activas (Fase 47): cuántas siguen "abierta". La consulta
+  // ya respeta RLS: si la persona no tiene acceso a Módulo 1/2/3, Supabase
+  // simplemente no devuelve nada y el badge no se pinta.
+  try {
+    const { count } = await sb.from('negociaciones').select('id', { count: 'exact', head: true }).eq('estado', 'abierta');
+    pintarBadge('neg', count);
+  } catch (e) {}
 
   // 1.7 Solicitudes de pedido: pendientes según el rol de quien mira
   try {
@@ -317,6 +338,13 @@ async function salir() {
   html += renderGrupo(2, nivel2, perfil.es_super_admin, permiso2?.submodulos_parciales);
   html += renderGrupo(3, nivel3, perfil.es_super_admin, permiso3?.submodulos_parciales);
   html += '</div>';
+
+  const accesoNegociaciones = perfil.es_super_admin || nivel1 !== 'inactivo' || nivel2 !== 'inactivo' || nivel3 !== 'inactivo';
+  if (accesoNegociaciones) {
+    html += '<div class="sec-t">Seguimiento comercial</div><div class="grid">';
+    html += renderComercial('🤝', 'Negociaciones activas', 'negociaciones.html', 'Seguimiento a ventas en negociación');
+    html += '</div>';
+  }
 
   html += '<div class="sec-t">Acceso público (para todos)</div><div class="grid">';
   html += renderPublico('📎', '4.1 Proveedor', 'proveedor.html', 'Adjunto de cotizaciones');

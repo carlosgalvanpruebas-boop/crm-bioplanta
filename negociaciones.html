@@ -1,0 +1,423 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Agrotienda Bioplanta · Negociaciones activas</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+:root{--v1:#33513a;--v2:#4f7c5a;--v3:#84a38c;--v4:#a9c2af;--vbg:#eaefeb;--vlt:#f4f8f5;--gris:#f0f4f0;--texto:#1a2e1a;--beige:#e6ceab;--beige-lt:#f4e9d9;--vino:#984745;--vino-lt:#f3e9e9}
+body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--gris);color:var(--texto);min-height:100vh;font-size:14px}
+
+.header{background:linear-gradient(135deg,var(--v1),var(--v2));color:#fff;padding:16px 20px;position:sticky;top:0;z-index:20;box-shadow:0 2px 12px rgba(0,0,0,.25)}
+.hdr-top{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap}
+.logo-wrap{display:flex;align-items:center;gap:10px}
+.logo-ico{font-size:26px}
+.brand{font-size:15px;font-weight:700}
+.brand-sub{font-size:11px;opacity:.75;margin-top:1px}
+.hdr-btns{display:flex;gap:8px;flex-wrap:wrap}
+.btn-h{background:rgba(255,255,255,.15);border:1px solid rgba(255,255,255,.3);color:#fff;padding:7px 16px;border-radius:20px;font-size:12px;cursor:pointer;font-family:inherit;text-decoration:none;display:inline-block}
+.btn-h:hover{background:rgba(255,255,255,.28)}
+.btn-h-act{background:var(--v4);border-color:var(--v4);color:var(--v1);font-weight:700}
+
+.wrap{max-width:1100px;margin:0 auto;padding:22px 16px 60px}
+.colab-bar{margin-top:12px;font-size:12px;opacity:.85}
+.session-badge{background:var(--v4);color:var(--v1);padding:4px 12px;border-radius:16px;font-weight:700;margin-left:6px}
+
+.form-box{background:#fff;border-radius:14px;padding:22px;box-shadow:0 2px 10px rgba(0,0,0,.07);max-width:620px;margin:0 auto}
+.field{display:flex;flex-direction:column;gap:5px;margin-bottom:14px}
+.field label{font-size:12px;font-weight:600;color:var(--v2)}
+.field input,.field select,.field textarea{border:1.5px solid #b7e4c7;border-radius:8px;padding:10px 12px;font-size:14px;font-family:inherit;outline:none;color:var(--texto);background:#fff;width:100%}
+.field textarea{resize:vertical}
+.btn-save{width:100%;margin-top:8px;padding:14px;background:linear-gradient(135deg,var(--v1),var(--v2));color:#fff;border:none;border-radius:10px;font-size:15px;font-weight:700;cursor:pointer;font-family:inherit}
+.btn-save:disabled{opacity:.55}
+.msg{margin-top:14px;padding:10px 14px;border-radius:8px;font-size:14px;text-align:center;display:none}
+.msg.ok{background:var(--vbg);color:var(--v1);display:block}
+.msg.err{background:#fde8e8;color:#a00;display:block}
+
+.fil-bar{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px}
+.fil-bar select,.fil-bar input{border:1.5px solid #b7e4c7;border-radius:8px;padding:8px 12px;font-size:13px;background:#fff;font-family:inherit;outline:none;flex:1;min-width:160px}
+
+.row-list{display:flex;flex-direction:column;gap:10px}
+.rowcard{background:#fff;border-radius:12px;box-shadow:0 1px 6px rgba(0,0,0,.07);padding:14px 16px}
+.rowcard-top{display:flex;justify-content:space-between;align-items:flex-start;gap:10px;flex-wrap:wrap}
+.rowcard-tit{font-size:14.5px;font-weight:700;color:var(--v1)}
+.rowcard-desc{font-size:12.5px;color:#5a6e5e;margin-top:4px}
+.rowcard-meta{font-size:11px;color:#888;margin-top:6px;display:flex;gap:10px;flex-wrap:wrap}
+.rowcard-meta.venc{color:var(--vino);font-weight:700}
+.estado-tag{font-size:10.5px;font-weight:800;padding:3px 10px;border-radius:10px;white-space:nowrap}
+.estado-abierta{background:var(--beige-lt);color:#8a5a1a}
+.estado-ganada{background:var(--v4);color:var(--v1)}
+.estado-perdida{background:var(--vino-lt);color:var(--vino)}
+.rowcard-acts{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}
+.btn-mini{font-size:11.5px;font-weight:700;padding:6px 12px;border-radius:8px;border:1.5px solid #b7e4c7;background:#fff;color:var(--v2);cursor:pointer;font-family:inherit}
+.btn-mini:hover{background:var(--vlt)}
+.btn-mini.ganar{border-color:var(--v3);color:var(--v1)}
+.btn-mini.perder{border-color:var(--vino);color:var(--vino)}
+.btn-mini.reabrir{border-color:var(--beige);color:#8a5a1a}
+.seg-log{margin-top:10px;border-top:1px solid #eee;padding-top:8px}
+.seg-item{font-size:11.5px;color:#5a6e5e;margin-bottom:5px;padding-left:10px;border-left:2px solid var(--v4)}
+.seg-item b{color:var(--v1)}
+.seg-add{display:flex;gap:6px;margin-top:8px}
+.seg-add input{flex:1;border:1.5px solid #b7e4c7;border-radius:8px;padding:7px 10px;font-size:12.5px;font-family:inherit}
+.seg-add button{font-size:11.5px;font-weight:700;padding:7px 12px;border-radius:8px;border:none;background:var(--v2);color:#fff;cursor:pointer;font-family:inherit;white-space:nowrap}
+.toggle-log{font-size:11px;color:var(--v2);cursor:pointer;font-weight:700;margin-top:8px;display:inline-block}
+
+.empty{text-align:center;padding:48px;color:#888;font-size:14px}
+.spin{text-align:center;padding:48px;font-size:28px}
+
+/* === Fase 36: rediseno visual — mismos colores/tipografia oficiales que el resto del CRM === */
+@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
+:root{--vlt:#faf8f4;--gris:#f6f4f0;--texto:#25281f;--beige-lt:#f6ecdd;--vino-lt:#f3e8e7}
+html,body{font-family:'Plus Jakarta Sans',Inter,'Segoe UI',system-ui,sans-serif;-webkit-font-smoothing:antialiased;background:var(--vlt)}
+button,input,select,textarea{font-family:inherit}
+h1,h2,h3{font-weight:800;letter-spacing:-.015em;line-height:1.2;color:var(--v1)}
+body,p,td,th,li,label{line-height:1.5}
+.brand{font-weight:700;letter-spacing:-.005em}
+.brand-sub{color:var(--v2);font-weight:500}
+.card,.form-box,.rowcard,.card-t{border-radius:14px;border:1px solid #e6e1d6;box-shadow:0 2px 10px rgba(37,40,31,.06)}
+button,.btn,.btn-h,.btn-save,.btn-h-act,.btn-mini,input,select,textarea{border-radius:10px}
+.btn-save,.btn-h-act{font-weight:600;letter-spacing:.01em;transition:transform .12s,box-shadow .12s,background .12s,filter .12s}
+.btn-save:hover,.btn-h-act:hover{transform:translateY(-1px);box-shadow:0 4px 10px rgba(37,40,31,.16);filter:brightness(1.05)}
+.btn-h{font-weight:600;border-width:1.5px}
+a:focus-visible,button:focus-visible,.btn-h:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible{outline:2px solid var(--v2);outline-offset:2px}
+@media(prefers-reduced-motion:reduce){*{transition-duration:.001ms!important;animation-duration:.001ms!important}}
+
+@media (max-width:640px){
+  .wrap{padding:14px 12px 48px}
+  .header{padding:13px 14px}
+  .brand{font-size:14px}
+  .card,.form-box,.rowcard{padding:16px 14px;overflow-x:auto}
+}
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div class="hdr-top">
+    <div class="logo-wrap">
+      <div class="logo-ico">🤝</div>
+      <div>
+        <div class="brand">Negociaciones activas</div>
+        <div class="brand-sub" style="font-style:italic;">Mostrador / Administrativo / Gerencia</div>
+      </div>
+    </div>
+    <div class="hdr-btns">
+      <button class="btn-h btn-h-act" id="btn-nueva">+ Nueva negociación</button>
+      <button class="btn-h" id="btn-activas">Activas</button>
+      <button class="btn-h" id="btn-cerradas">Cerradas</button>
+      <a class="btn-h" href="hub.html">← Hub</a>
+    </div>
+  </div>
+  <div class="colab-bar" id="colab-bar"></div>
+</div>
+
+<div class="wrap" id="app"><div class="spin">⏳</div></div>
+
+<script>
+const SUPABASE_URL = 'https://fpqogvxssnoarzgxcitc.supabase.co';
+const SUPABASE_KEY = 'sb_publishable_ccZF-8tenblFEah5lXfd3w_mYTHMtMC';
+const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+const SEDES = ['Chigorodó', 'Belén de Bajirá'];
+
+function hoyISO() {
+  // Fecha de hoy en horario Colombia (UTC-5), igual que el resto del CRM.
+  const ahora = new Date();
+  const co = new Date(ahora.getTime() - 5 * 60 * 60 * 1000);
+  return co.toISOString().slice(0, 10);
+}
+
+function money(n) {
+  if (n === null || n === undefined || n === '') return '—';
+  return Number(n).toLocaleString('es-CO', { style: 'currency', currency: 'COP', maximumFractionDigits: 0 });
+}
+
+function fechaCorta(f) {
+  if (!f) return null;
+  return new Date(f + 'T00:00:00').toLocaleDateString('es-CO', { day: '2-digit', month: 'short', year: 'numeric' });
+}
+
+function fechaHoraCorta(ts) {
+  if (!ts) return '';
+  return new Date(ts).toLocaleDateString('es-CO', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' });
+}
+
+function estadoTexto(e) {
+  return e === 'abierta' ? 'Abierta' : e === 'ganada' ? '✅ Ganada' : e === 'perdida' ? '❌ Perdida' : e;
+}
+
+let userId = null;
+let miNombre = '';
+let miId = null;
+let perfiles = [];   // {id, nombre, cargo}
+let vista = 'activas'; // 'nueva' | 'activas' | 'cerradas'
+let logsAbiertos = new Set(); // ids de negociaciones con la bitácora desplegada
+
+function renderColabBar() {
+  document.getElementById('colab-bar').innerHTML =
+    `Sesión: <span class="session-badge">${miNombre}</span>`;
+}
+
+function setActiveBtn() {
+  document.getElementById('btn-nueva').classList.toggle('btn-h-act', vista === 'nueva');
+  document.getElementById('btn-activas').classList.toggle('btn-h-act', vista === 'activas');
+  document.getElementById('btn-cerradas').classList.toggle('btn-h-act', vista === 'cerradas');
+}
+
+function showMsg(txt, tipo) {
+  const el = document.getElementById('msg');
+  if (!el) return;
+  el.textContent = txt;
+  el.className = 'msg ' + tipo;
+}
+
+async function render() {
+  setActiveBtn();
+  const app = document.getElementById('app');
+  if (vista === 'nueva') { app.innerHTML = htmlNueva(); bindNueva(); return; }
+  app.innerHTML = '<div class="spin">⏳</div>';
+  if (vista === 'activas') { await renderLista('abierta'); }
+  if (vista === 'cerradas') { await renderLista(['ganada', 'perdida']); }
+}
+
+// ── NUEVA NEGOCIACIÓN ────────────────────────────────────────────────────────
+function htmlNueva() {
+  const opcionesResp = perfiles.map(p =>
+    `<option value="${p.id}"${p.id === miId ? ' selected' : ''}>${p.nombre}</option>`
+  ).join('');
+  const opcionesSede = SEDES.map(s => `<option value="${s}">${s}</option>`).join('');
+
+  return `
+  <div class="form-box">
+    <div class="field"><label>Cliente *</label>
+      <input type="text" id="f-cliente" placeholder="Nombre del cliente o finca">
+    </div>
+    <div class="field"><label>NIT / cédula (opcional)</label>
+      <input type="text" id="f-nit" placeholder="Ej. 900123456-7">
+    </div>
+    <div class="field"><label>Sede *</label>
+      <select id="f-sede">${opcionesSede}</select>
+    </div>
+    <div class="field"><label>Producto de interés (opcional)</label>
+      <input type="text" id="f-producto" placeholder="Ej. Fertilizante NPK, agroquímicos...">
+    </div>
+    <div class="field"><label>Valor estimado (opcional)</label>
+      <input type="number" id="f-valor" placeholder="Ej. 3500000" min="0" step="1000">
+    </div>
+    <div class="field"><label>Responsable de seguimiento</label>
+      <select id="f-resp">${opcionesResp}</select>
+    </div>
+    <div class="field"><label>Próxima fecha de seguimiento (opcional)</label>
+      <input type="date" id="f-fecha">
+    </div>
+    <button class="btn-save" id="btn-guardar-neg">Crear negociación</button>
+    <div class="msg" id="msg"></div>
+  </div>`;
+}
+
+function bindNueva() {
+  document.getElementById('btn-guardar-neg').addEventListener('click', async () => {
+    const cliente = document.getElementById('f-cliente').value.trim();
+    const nit = document.getElementById('f-nit').value.trim();
+    const sede = document.getElementById('f-sede').value;
+    const producto = document.getElementById('f-producto').value.trim();
+    const valorRaw = document.getElementById('f-valor').value;
+    const respId = document.getElementById('f-resp').value;
+    const fecha = document.getElementById('f-fecha').value;
+
+    if (!cliente) { showMsg('⚠️ El nombre del cliente es obligatorio', 'err'); return; }
+
+    const btn = document.getElementById('btn-guardar-neg');
+    btn.disabled = true;
+    btn.textContent = 'Creando...';
+
+    const respPerfil = perfiles.find(p => p.id === respId);
+
+    try {
+      const { error } = await sb.from('negociaciones').insert({
+        cliente,
+        cliente_nit: nit || null,
+        sede,
+        producto_interes: producto || null,
+        valor_estimado: valorRaw ? Number(valorRaw) : null,
+        estado: 'abierta',
+        proxima_fecha_seguimiento: fecha || null,
+        responsable_perfil_id: respId || null,
+        responsable_nombre: respPerfil ? respPerfil.nombre : null,
+        creado_por: miId,
+        creado_por_nombre: miNombre,
+      });
+      if (error) throw error;
+
+      showMsg('✅ Negociación creada', 'ok');
+      setTimeout(() => { vista = 'activas'; render(); }, 900);
+    } catch (e) {
+      showMsg('❌ ' + (e.message || 'Error al crear la negociación'), 'err');
+      btn.disabled = false;
+      btn.textContent = 'Crear negociación';
+    }
+  });
+}
+
+// ── LISTADO (activas / cerradas) ─────────────────────────────────────────────
+async function renderLista(estados) {
+  const listaEstados = Array.isArray(estados) ? estados : [estados];
+  let q = sb.from('negociaciones').select('*, negociaciones_seguimientos(*)').in('estado', listaEstados);
+  q = listaEstados.length === 1 && listaEstados[0] === 'abierta'
+    ? q.order('proxima_fecha_seguimiento', { ascending: true, nullsFirst: false }).order('creado_en', { ascending: false })
+    : q.order('cerrada_en', { ascending: false });
+  const { data, error } = await q;
+  const filas = (error || !data) ? [] : data;
+
+  if (filas.length === 0) {
+    document.getElementById('app').innerHTML = `<div class="empty">${listaEstados[0] === 'abierta' ? 'No hay negociaciones activas todavía. Usa "+ Nueva negociación" para registrar la primera.' : 'Todavía no hay negociaciones cerradas.'}</div>`;
+    return;
+  }
+
+  const hoy = hoyISO();
+  const rows = filas.map(n => {
+    const seguimientos = (n.negociaciones_seguimientos || []).slice().sort((a, b) => new Date(a.creado_en) - new Date(b.creado_en));
+    const vencida = n.estado === 'abierta' && n.proxima_fecha_seguimiento && n.proxima_fecha_seguimiento < hoy;
+    const logAbierto = logsAbiertos.has(n.id);
+
+    const logHtml = logAbierto ? `
+      <div class="seg-log">
+        ${seguimientos.length === 0 ? '<div class="seg-item">Sin notas de seguimiento todavía</div>' : seguimientos.map(s =>
+          `<div class="seg-item"><b>${s.creado_por_nombre || '—'}</b> · ${fechaHoraCorta(s.creado_en)}<br>${s.nota}</div>`
+        ).join('')}
+        <div class="seg-add">
+          <input type="text" placeholder="Agregar nota de seguimiento..." data-seg-input="${n.id}">
+          <button data-seg-btn="${n.id}">Agregar</button>
+        </div>
+      </div>` : `<span class="toggle-log" data-toggle-log="${n.id}">📝 Ver seguimiento (${seguimientos.length})</span>`;
+
+    const acciones = n.estado === 'abierta' ? `
+      <div class="rowcard-acts">
+        <button class="btn-mini ganar" data-cerrar="${n.id}" data-nuevo-estado="ganada">✅ Marcar como ganada</button>
+        <button class="btn-mini perder" data-cerrar="${n.id}" data-nuevo-estado="perdida">❌ Marcar como perdida</button>
+      </div>` : `
+      <div class="rowcard-acts">
+        <button class="btn-mini reabrir" data-reabrir="${n.id}">↩️ Reabrir</button>
+      </div>`;
+
+    return `
+      <div class="rowcard">
+        <div class="rowcard-top">
+          <div>
+            <div class="rowcard-tit">${n.cliente}${n.cliente_nit ? ` <span style="font-weight:400;color:#999;font-size:11.5px">(${n.cliente_nit})</span>` : ''}</div>
+            ${n.producto_interes ? `<div class="rowcard-desc">${n.producto_interes}</div>` : ''}
+          </div>
+          <span class="estado-tag estado-${n.estado}">${estadoTexto(n.estado)}</span>
+        </div>
+        <div class="rowcard-meta${vencida ? ' venc' : ''}">
+          <span>📍 ${n.sede}</span>
+          <span>💰 ${money(n.valor_estimado)}</span>
+          <span>👤 ${n.responsable_nombre || '—'}</span>
+          ${n.proxima_fecha_seguimiento ? `<span>${vencida ? '⚠️ Vencida:' : '📅 Próximo seguimiento:'} ${fechaCorta(n.proxima_fecha_seguimiento)}</span>` : ''}
+          ${n.estado !== 'abierta' && n.cerrada_en ? `<span>Cerrada: ${fechaCorta(n.cerrada_en.slice(0,10))}</span>` : ''}
+        </div>
+        ${n.motivo_cierre ? `<div class="rowcard-desc">Motivo: ${n.motivo_cierre}</div>` : ''}
+        ${logHtml}
+        ${acciones}
+      </div>`;
+  }).join('');
+
+  document.getElementById('app').innerHTML = `<div class="row-list">${rows}</div>`;
+
+  document.querySelectorAll('[data-toggle-log]').forEach(el => {
+    el.addEventListener('click', () => {
+      logsAbiertos.add(el.dataset.toggleLog);
+      render();
+    });
+  });
+
+  document.querySelectorAll('[data-seg-btn]').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const id = btn.dataset.segBtn;
+      const input = document.querySelector(`[data-seg-input="${id}"]`);
+      const nota = input.value.trim();
+      if (!nota) return;
+      btn.disabled = true;
+      try {
+        await sb.from('negociaciones_seguimientos').insert({
+          negociacion_id: id, nota, creado_por: miId, creado_por_nombre: miNombre,
+        });
+        await sb.from('negociaciones').update({ actualizado_en: new Date().toISOString() }).eq('id', id);
+        logsAbiertos.add(id);
+        render();
+      } catch (e) {
+        alert('No se pudo guardar la nota: ' + (e.message || e));
+        btn.disabled = false;
+      }
+    });
+  });
+
+  document.querySelectorAll('[data-cerrar]').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const id = btn.dataset.cerrar;
+      const nuevoEstado = btn.dataset.nuevoEstado;
+      const motivo = window.prompt(nuevoEstado === 'ganada' ? 'Nota de cierre (opcional) — ej. valor final, detalles de la venta:' : 'Motivo de la pérdida (opcional):', '');
+      if (motivo === null) return; // canceló el prompt
+      try {
+        await sb.from('negociaciones').update({
+          estado: nuevoEstado,
+          cerrada_en: new Date().toISOString(),
+          motivo_cierre: motivo || null,
+          actualizado_en: new Date().toISOString(),
+        }).eq('id', id);
+        render();
+      } catch (e) {
+        alert('No se pudo actualizar: ' + (e.message || e));
+      }
+    });
+  });
+
+  document.querySelectorAll('[data-reabrir]').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const id = btn.dataset.reabrir;
+      try {
+        await sb.from('negociaciones').update({
+          estado: 'abierta',
+          cerrada_en: null,
+          motivo_cierre: null,
+          actualizado_en: new Date().toISOString(),
+        }).eq('id', id);
+        render();
+      } catch (e) {
+        alert('No se pudo reabrir: ' + (e.message || e));
+      }
+    });
+  });
+}
+
+// ── NAV ───────────────────────────────────────────────────────────────────────
+document.getElementById('btn-nueva').addEventListener('click', () => { vista = 'nueva'; render(); });
+document.getElementById('btn-activas').addEventListener('click', () => { vista = 'activas'; render(); });
+document.getElementById('btn-cerradas').addEventListener('click', () => { vista = 'cerradas'; render(); });
+
+// ── INIT ──────────────────────────────────────────────────────────────────────
+(async () => {
+  const { data: { session } } = await sb.auth.getSession();
+  if (!session) { window.location.href = 'login.html'; return; }
+  userId = session.user.id;
+  miId = userId;
+
+  const { data: miPerfil } = await sb.from('perfiles').select('*').eq('id', userId).single();
+  if (!miPerfil) {
+    document.getElementById('app').innerHTML = '<div class="empty">Tu usuario no tiene un perfil configurado todavía. Pídele a Carlos que te lo cree en el Panel de Accesos.</div>';
+    return;
+  }
+  miNombre = miPerfil.nombre;
+  renderColabBar();
+
+  const { data: listaPerfiles } = await sb.from('perfiles').select('id, nombre, cargo');
+  perfiles = listaPerfiles || [];
+
+  render();
+})();
+</script>
+
+</body>
+</html>

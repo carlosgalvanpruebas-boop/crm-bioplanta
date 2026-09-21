@@ -108,6 +108,14 @@ let productos = []; // agrupado por codigo_sap, con el desglose por sede adentro
 let filtroSede = 'todas';
 let filtroEstado = 'todos';
 let filtroTexto = '';
+// Fase 45 (21-sep, a pedido de Carlos): productos que se sacan de este
+// reporte a propósito (ej. un agotado que ya no se va a volver a pedir)
+// sin borrarlos de `inventario` — solo se ocultan de esta pantalla y de
+// sus alertas. `inventario_descartados` es el "archivo" donde quedan
+// guardados por si se cambia de opinión; `vista` alterna entre la lista
+// activa y ese archivo.
+let vista = 'activos'; // 'activos' | 'descartados'
+let descartados = []; // filas de inventario_descartados
 function fmtFecha(iso) {
   if (!iso) return '—';
   return new Date(iso).toLocaleDateString('es-CO', { day: '2-digit', month: 'short', year: 'numeric' });
@@ -183,19 +191,86 @@ function renderIndicadores(lista) {
     </div>
   `;
 }
-function aplicarFiltros() {
-  return productos.filter(p => {
+function descartadosSet() {
+  return new Set(descartados.map(d => d.codigo_sap));
+}
+function aplicarFiltros(lista) {
+  return lista.filter(p => {
     if (filtroSede !== 'todas' && !(p.porSede[filtroSede] > 0)) return false;
     if (filtroEstado !== 'todos' && calcularEstado(p) !== filtroEstado) return false;
     if (filtroTexto && !(p.producto || '').toLowerCase().includes(filtroTexto.toLowerCase())) return false;
     return true;
   });
 }
+// Descartar/restaurar (Fase 45): descartar guarda el producto en
+// `inventario_descartados` (con motivo opcional) y lo saca de la lista
+// activa; restaurar simplemente borra esa fila, sin tocar `inventario`
+// para nada — el stock real sigue viniendo de la carga de SAP como
+// siempre, esto solo controla qué se muestra en este reporte.
+async function cargarDescartados() {
+  const { data, error } = await sb.from('inventario_descartados').select('*').order('descartado_en', { ascending: false });
+  if (!error) descartados = data || [];
+}
+async function descartarProducto(codigo_sap) {
+  const p = productos.find(x => x.codigo_sap === codigo_sap);
+  const nombre = p ? p.producto : codigo_sap;
+  const motivo = window.prompt(`¿Por qué se descarta "${nombre}" de esta lista? (opcional — queda guardado en "Descartados" y se puede restaurar cuando quieras)`, '');
+  if (motivo === null) return; // canceló el prompt
+  const { error } = await sb.from('inventario_descartados').upsert({
+    codigo_sap,
+    producto: p ? p.producto : null,
+    categoria: p ? p.categoria : null,
+    motivo: motivo.trim() || null,
+    descartado_por: miPerfil?.id || null,
+    descartado_por_nombre: miPerfil?.nombre || null,
+    descartado_en: new Date().toISOString(),
+  });
+  if (error) { alert('No se pudo descartar: ' + error.message); return; }
+  await cargarDescartados();
+  render();
+}
+async function restaurarProducto(codigo_sap) {
+  const { error } = await sb.from('inventario_descartados').delete().eq('codigo_sap', codigo_sap);
+  if (error) { alert('No se pudo restaurar: ' + error.message); return; }
+  await cargarDescartados();
+  render();
+}
+function renderDescartados() {
+  const filasHtml = descartados.length
+    ? descartados.map(d => `
+        <div class="fila">
+          <div class="f-info">
+            <div class="f-prod">${d.producto || d.codigo_sap}</div>
+            <div class="f-meta">${d.categoria || 'Sin categoría'} · Código ${d.codigo_sap}</div>
+            <div class="f-meta">Descartado por ${d.descartado_por_nombre || 'un usuario'} · ${fmtFecha(d.descartado_en)}${d.motivo ? ' · Motivo: ' + d.motivo : ''}</div>
+          </div>
+          <div class="f-datos">
+            <button class="btn-mini" onclick="restaurarProducto('${d.codigo_sap}')">↩️ Restaurar a la lista</button>
+          </div>
+        </div>
+      `).join('')
+    : '<div class="vacio">No hay productos descartados todavía. Los que saques de "Seguimiento activo" con 🗑️ aparecen aquí, y puedes traerlos de vuelta cuando quieras.</div>';
+  return `
+    <div class="aviso">📦 Estos productos quedaron fuera de "Seguimiento activo" (y de sus alertas de stock bajo/agotado), pero <b>siguen existiendo normalmente en el inventario real</b> — descartarlos aquí no los borra ni afecta la carga de SAP, solo los oculta de este reporte. Restaura cualquiera cuando quieras que vuelva a aparecer.</div>
+    <div class="card">${filasHtml}</div>
+  `;
+}
 function badgeEstadoTexto(estado) {
   return { bajo: 'stock bajo', agotado: 'agotado' }[estado] || estado;
 }
 function render() {
-  const lista = aplicarFiltros();
+  const tabsHtml = `
+    <div class="filtros" style="margin-bottom:12px">
+      <button class="filtro-chip ${vista === 'activos' ? 'act' : ''}" onclick="vista='activos'; render()">📋 Seguimiento activo</button>
+      <button class="filtro-chip ${vista === 'descartados' ? 'act' : ''}" onclick="vista='descartados'; render()">📦 Descartados (${descartados.length})</button>
+    </div>
+  `;
+  if (vista === 'descartados') {
+    document.getElementById('wrap').innerHTML = tabsHtml + renderDescartados();
+    return;
+  }
+  const activos = productos.filter(p => !descartadosSet().has(p.codigo_sap));
+  const lista = aplicarFiltros(activos);
   const filasHtml = lista.length
     ? lista.map(p => {
         const estado = calcularEstado(p);
@@ -217,6 +292,7 @@ function render() {
               <div class="f-num"><b>${p.stock_maximo_sugerido !== null && p.stock_maximo_sugerido !== undefined ? fmtNum(p.stock_maximo_sugerido) : '—'}</b><span>máximo</span></div>
               ${badgeEstado(estado)}
               ${urlReporte ? `<a class="btn-mini" href="${urlReporte}">📩 Reportar compra</a>` : ''}
+              <button class="btn-mini" style="background:var(--vino)" onclick="descartarProducto('${p.codigo_sap}')" title="Quitar de esta lista — se puede restaurar después desde &quot;Descartados&quot;">🗑️ Descartar</button>
             </div>
           </div>
         `;
@@ -224,9 +300,10 @@ function render() {
     : '<div class="vacio">No hay productos que coincidan con el filtro.</div>';
   document.getElementById('wrap').innerHTML = `
     <div class="aviso">
-      ℹ️ El stock y "última actualización" vienen de la carga real de SAP (por artículo y por sede, desde la Fase 25). El rango de <b>mínimo y máximo</b> se calcula con el histórico real de ventas del trimestre, pensado para compras mensuales: <b>mínimo</b> = (venta promedio diaria × 7 días, lo que tarda en llegar el pedido) + desviación estándar; <b>máximo</b> = ese mínimo + un mes completo de venta (promedio × 30). Ese umbral es sobre el <b>total combinado de las dos sedes</b> (todavía no hay ventas separadas por sede), por eso el estado (En rango / Stock bajo / etc.) siempre se calcula sobre el total, aunque abajo veas el desglose real por sede. Cuando el stock cae al mínimo o menos, ya toca comprar hasta llegar al máximo. Mientras no haya al menos 15 días de ventas registradas para un producto, se muestra "Sin datos suficientes" en vez de una alerta poco confiable.
+      ℹ️ El stock y "última actualización" vienen de la carga real de SAP (por artículo y por sede, desde la Fase 25). El rango de <b>mínimo y máximo</b> se calcula con el histórico real de ventas del trimestre, pensado para compras mensuales: <b>mínimo</b> = (venta promedio diaria × 7 días, lo que tarda en llegar el pedido) + desviación estándar; <b>máximo</b> = ese mínimo + un mes completo de venta (promedio × 30). Ese umbral es sobre el <b>total combinado de las dos sedes</b> (todavía no hay ventas separadas por sede), por eso el estado (En rango / Stock bajo / etc.) siempre se calcula sobre el total, aunque abajo veas el desglose real por sede. Cuando el stock cae al mínimo o menos, ya toca comprar hasta llegar al máximo. Mientras no haya al menos 15 días de ventas registradas para un producto, se muestra "Sin datos suficientes" en vez de una alerta poco confiable. Un producto que no se vaya a volver a pedir se puede sacar de esta lista con 🗑️ Descartar, sin afectar el inventario real — queda guardado en la pestaña "📦 Descartados" por si se cambia de opinión.
     </div>
-    ${renderIndicadores(productos)}
+    ${tabsHtml}
+    ${renderIndicadores(activos)}
     <div class="filtros">
       <select id="f-sede" onchange="filtroSede=this.value; render()">
         <option value="todas">Todas las sedes (total)</option>
@@ -301,6 +378,7 @@ function render() {
     };
   });
   productos = agruparPorProducto(productosPorSede);
+  await cargarDescartados();
   render();
 })();
 </script>

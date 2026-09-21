@@ -149,10 +149,23 @@ let filtroTipo = 'todos';
 let filtroEstadoDesc = 'abierto';
 let puedeResolver = false;
 let sesionConteo = {}; // { sorteoId: [{producto, stock_sap, conteo_fisico}] }
+// Fase 46 (21-sep, a pedido de Carlos): además del sorteo aleatorio, permite
+// asignar a mano que se cuente un grupo específico, y hacer configurable la
+// frecuencia del sorteo automático por sede (semanal, como hasta ahora, o
+// diario — "que ellos tengan como medida contar un grupo por día").
+let preconteoConfig = {}; // { 'Chigorodó': 'semanal'|'diario', ... }
+let puedeAsignarManual = false; // Módulo 2 (cualquier nivel) o Super Admin
 
 function fmtFecha(iso) {
   if (!iso) return '—';
   return new Date(iso).toLocaleDateString('es-CO', { day: '2-digit', month: 'short', year: 'numeric' });
+}
+// Fase 46: fecha de hoy en horario Colombia (mismo criterio ya usado en
+// resumen-venta.html/gerencia-ventas.html — toISOString() da la fecha en
+// UTC, no local, lo que rompe cerca de medianoche).
+function hoyISO() {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
 function lunesDeEstaSemana() {
   const hoy = new Date();
@@ -184,12 +197,16 @@ function irA(vista) {
 // ---------------------------------------------------------
 async function generarSorteosSiFaltan() {
   if (!puedeGenerar) return;
-  const semana = lunesDeEstaSemana();
   const { data: grupos } = await sb.from('inventario_grupos').select('*');
   if (!grupos || !grupos.length) return;
 
   for (const sede of SEDES) {
-    const { data: existente } = await sb.from('sorteos_preconteo').select('id').eq('sede', sede).eq('semana', semana).maybeSingle();
+    const frecuencia = preconteoConfig[sede] || 'semanal';
+    const periodo = frecuencia === 'diario' ? hoyISO() : lunesDeEstaSemana();
+    // Solo se compara contra sorteos de origen automático — una asignación
+    // manual (Fase 46) para este mismo período no debe impedir que el
+    // sorteo automático se genere igual, ni al revés.
+    const { data: existente } = await sb.from('sorteos_preconteo').select('id').eq('sede', sede).eq('semana', periodo).eq('origen', 'automatico').maybeSingle();
     if (existente) continue;
 
     const { data: recientes } = await sb.from('sorteos_preconteo').select('grupo_id').eq('sede', sede).order('semana', { ascending: false }).limit(3);
@@ -203,33 +220,122 @@ async function generarSorteosSiFaltan() {
     await sb.from('sorteos_preconteo').insert({
       grupo_id: grupoElegido.id,
       sede,
-      semana,
+      semana: periodo,
       responsable_perfil_id: responsableId || null,
       estado: 'pendiente',
+      origen: 'automatico',
     });
   }
+}
+
+// ---------------------------------------------------------
+// Fase 46: asignación manual de grupo + frecuencia configurable
+// ---------------------------------------------------------
+function renderAsignarManual(grupos) {
+  const gruposOptions = (grupos || []).map(g => `<option value="${g.id}">${g.nombre}</option>`).join('');
+  const frecSelects = SEDES.map(s => `
+    <div class="field">
+      <label>${s}</label>
+      <select id="frec-${s}">
+        <option value="semanal" ${preconteoConfig[s] !== 'diario' ? 'selected' : ''}>Semanal (un grupo por semana)</option>
+        <option value="diario" ${preconteoConfig[s] === 'diario' ? 'selected' : ''}>Diario (un grupo cada día)</option>
+      </select>
+    </div>
+  `).join('');
+  return `
+    <div class="card">
+      <div class="card-t">➕ Asignar un conteo manual</div>
+      <div class="card-sub">Asigna que se cuente un grupo específico, sin esperar al sorteo automático — se suma a lo que ya esté pendiente, no lo reemplaza.</div>
+      <div class="field"><label>Sede</label><select id="asig-sede">${SEDES.map(s => `<option value="${s}">${s}</option>`).join('')}</select></div>
+      <div class="field"><label>Grupo a contar</label><select id="asig-grupo">${gruposOptions}</select></div>
+      <button class="btn-mini" id="btn-asignar" onclick="asignarConteoManual()">📌 Asignar</button>
+      <div class="msg" id="msg-asignar" style="display:none"></div>
+    </div>
+    <div class="card">
+      <div class="card-t">⚙️ Frecuencia del sorteo automático</div>
+      <div class="card-sub">Cada cuánto se sortea un grupo nuevo por sí solo, sin que nadie lo asigne a mano. El cambio aplica desde el próximo período — no afecta las tareas ya generadas.</div>
+      ${frecSelects}
+      <button class="btn-mini sec" onclick="guardarFrecuencias()">💾 Guardar frecuencia</button>
+      <div class="msg" id="msg-frecuencia" style="display:none"></div>
+    </div>
+  `;
+}
+
+async function asignarConteoManual() {
+  const sede = document.getElementById('asig-sede').value;
+  const grupoId = document.getElementById('asig-grupo').value;
+  const msg = document.getElementById('msg-asignar');
+  msg.style.display = 'none';
+  if (!grupoId) {
+    msg.textContent = 'Elige un grupo.'; msg.className = 'msg err'; msg.style.display = 'block';
+    return;
+  }
+  const btn = document.getElementById('btn-asignar');
+  btn.disabled = true;
+  const { data: grupo } = await sb.from('inventario_grupos').select('*').eq('id', grupoId).maybeSingle();
+  const { data: responsableId } = await sb.rpc('perfil_responsable_area', { p_sede: sede, p_area: grupo?.responsable_area });
+  const { error } = await sb.from('sorteos_preconteo').insert({
+    grupo_id: grupoId,
+    sede,
+    semana: hoyISO(),
+    responsable_perfil_id: responsableId || null,
+    estado: 'pendiente',
+    origen: 'manual',
+    asignado_por: miId,
+  });
+  btn.disabled = false;
+  if (error) {
+    msg.textContent = 'No se pudo asignar: ' + error.message; msg.className = 'msg err'; msg.style.display = 'block';
+    return;
+  }
+  msg.textContent = '✅ Asignado — ya aparece en la lista de tareas.'; msg.className = 'msg ok'; msg.style.display = 'block';
+  setTimeout(() => renderSorteo(), 700);
+}
+
+async function guardarFrecuencias() {
+  const msg = document.getElementById('msg-frecuencia');
+  msg.style.display = 'none';
+  const filas = SEDES.map(s => ({
+    sede: s,
+    frecuencia: document.getElementById(`frec-${s}`).value,
+    actualizado_por: miId,
+    actualizado_en: new Date().toISOString(),
+  }));
+  const { error } = await sb.from('preconteo_config').upsert(filas, { onConflict: 'sede' });
+  if (error) {
+    msg.textContent = 'No se pudo guardar: ' + error.message; msg.className = 'msg err'; msg.style.display = 'block';
+    return;
+  }
+  filas.forEach(f => { preconteoConfig[f.sede] = f.frecuencia; });
+  msg.textContent = '✅ Frecuencia guardada.'; msg.className = 'msg ok'; msg.style.display = 'block';
 }
 
 // ---------------------------------------------------------
 // TAB: SORTEO DE LA SEMANA
 // ---------------------------------------------------------
 async function renderSorteo() {
-  document.getElementById('wrap').innerHTML = '<div class="loading">Cargando sorteo de la semana...</div>';
+  document.getElementById('wrap').innerHTML = '<div class="loading">Cargando tareas de conteo...</div>';
 
   await generarSorteosSiFaltan();
 
-  const semana = lunesDeEstaSemana();
+  // Fase 46: ya no se filtra a "la semana en curso" — con frecuencia diaria,
+  // o con asignaciones manuales sueltas, una tarea puede quedar pendiente de
+  // un período distinto al actual y debe seguir viéndose hasta completarse
+  // (mismo criterio que ya usa el contador del Hub: todo lo no completado).
   const [{ data: sorteos }, { data: grupos }] = await Promise.all([
-    sb.from('sorteos_preconteo').select('*').eq('semana', semana).order('sede'),
+    sb.from('sorteos_preconteo').select('*').neq('estado', 'completado').order('sede').order('semana', { ascending: false }),
     sb.from('inventario_grupos').select('*'),
   ]);
   sorteosActuales = sorteos || [];
   const gruposPorId = {};
   (grupos || []).forEach(g => { gruposPorId[g.id] = g; });
 
+  const asignarHtml = puedeAsignarManual ? renderAsignarManual(grupos || []) : '';
+
   if (!sorteosActuales.length) {
     document.getElementById('wrap').innerHTML = `
-      <div class="aviso">Todavía no hay un sorteo asignado para ti esta semana. El sorteo se genera automáticamente cuando alguien de Bodega, Mostrador o Almacén entra por primera vez en la semana a esta página — si nadie de esas áreas ha entrado todavía, avísales que revisen aquí.</div>
+      ${asignarHtml}
+      <div class="aviso">No hay tareas de conteo pendientes por ahora. ${puedeGenerar ? 'Se genera una automática la próxima vez que entres aquí, según la frecuencia configurada (semanal o diaria).' : 'El sorteo se genera automáticamente cuando alguien de Bodega, Mostrador o Almacén entra a esta página — si nadie de esas áreas ha entrado todavía, avísales que revisen aquí.'}</div>
     `;
     return;
   }
@@ -237,12 +343,13 @@ async function renderSorteo() {
   const tarjetasHtml = sorteosActuales.map(s => {
     const grupo = gruposPorId[s.grupo_id] || { nombre: '(grupo desconocido)', responsable_area: '—' };
     const esMio = s.responsable_perfil_id === miId;
+    const etiquetaManual = s.origen === 'manual' ? ' <span class="badge" style="background:var(--beige);color:var(--v1)">Asignado a mano</span>' : '';
     return `
       <div class="card ${esMio ? 'mio' : ''}">
         <div class="sorteo-top">
           <div>
-            <div class="sorteo-grupo">${grupo.nombre}</div>
-            <div class="sorteo-meta">${s.sede} · Le corresponde a: ${grupo.responsable_area} de esta sede ${esMio ? '— <b>te toca a ti esta semana</b>' : (esSuperAdmin ? '(no te toca contar a ti — ves el botón solo porque eres Super Admin, para poder probar la pantalla)' : '(en consulta — el conteo lo hace esa persona, no tú)')}</div>
+            <div class="sorteo-grupo">${grupo.nombre}${etiquetaManual}</div>
+            <div class="sorteo-meta">${s.sede} · ${fmtFecha(s.semana)} · Le corresponde a: ${grupo.responsable_area} de esta sede ${esMio ? '— <b>te toca a ti</b>' : (esSuperAdmin ? '(no te toca contar a ti — ves el botón solo porque eres Super Admin, para poder probar la pantalla)' : '(en consulta — el conteo lo hace esa persona, no tú)')}</div>
           </div>
           <span class="badge b-${s.estado}">${estadoTexto(s.estado)}</span>
         </div>
@@ -258,7 +365,8 @@ async function renderSorteo() {
   }).join('');
 
   document.getElementById('wrap').innerHTML = `
-    <div class="aviso">Cada semana el sistema sortea un grupo de productos por sede para hacer un conteo físico y compararlo contra lo que dice SAP. Los grupos de ejemplo se renombrarán cuando cargues el listado real de inventario.</div>
+    ${asignarHtml}
+    <div class="aviso">El sistema sortea un grupo de productos por sede para hacer un conteo físico y compararlo contra lo que dice SAP, con la frecuencia configurada abajo (semanal o diaria). También se puede asignar a mano que se cuente un grupo específico, sin esperar al sorteo.</div>
     ${tarjetasHtml}
   `;
 }
@@ -501,11 +609,19 @@ async function resolverDescuadre(id) {
   puedeGenerar = esOperativo || esSuperAdmin;
   puedeResolver = esSuperAdmin || nivel2 === 'completo';
   puedeVer = esSuperAdmin || nivel1 !== 'inactivo' || nivel2 !== 'inactivo';
+  // Fase 46: asignar un conteo a mano y cambiar la frecuencia del sorteo
+  // automático queda para Módulo 2 (cualquier nivel) o Super Admin — mismo
+  // criterio ya usado para "puede resolver descuadres" en este archivo.
+  puedeAsignarManual = esSuperAdmin || nivel2 !== 'inactivo';
 
   if (!puedeVer) {
     document.getElementById('wrap').innerHTML = '<div class="loading">No tienes permiso para ver este módulo.</div>';
     return;
   }
+
+  const { data: config } = await sb.from('preconteo_config').select('*');
+  preconteoConfig = {};
+  (config || []).forEach(c => { preconteoConfig[c.sede] = c.frecuencia; });
 
   renderNav();
   renderSorteo();
